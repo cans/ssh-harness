@@ -51,6 +51,39 @@ if cmdargv[:2] == ['hg', '-R'] and cmdargv[3:] == ['serve', '--stdio']:
     else:
         sys.stderr.write('Illegal repository "%s"\n' % repo)
         sys.exit(255)
+elif cmdargv[0].startswith('git'):
+    from dulwich.server import (ReceivePackHandler,
+				FileSystemBackend,
+                                UploadPackHandler,
+				serve_command,
+                                update_server_info,
+                                )
+    from dulwich.errors import NotGitRepository
+    path = cmdargv[1]
+    repo = os.path.normpath(os.path.join(cwd, os.path.expanduser(path)))
+    cmdargv[1] = repo
+    if repo not in allowed_paths:
+       sys.stderr.write('Illegal repository "{}"\n'.format(repo))
+       sys.exit(255)
+
+    try:
+        backend = FileSystemBackend()
+        repo = backend.open_repository(repo)
+    except NotGitRepository as e:
+        sys.stderr.write("`{}' is not a git repository\n".format(cmdargv[1]))
+        sys.exit(255)
+
+    # Select handler
+    if 'git-receive-pack' == cmdargv[0]:
+        handler = ReceivePackHandler
+    elif 'git-upload-pack' == cmdargv[0]:
+        handler = UploadPackHandler
+
+    # Is the backend= kwarg required ?
+    exit_status = serve_command(handler, argv=cmdargv)
+    if ReceivePackHandler == handler:
+        update_server_info(repo)
+    sys.exit(exit_status)
 else:
     sys.stderr.write('Illegal command "%s"\n' % orig_cmd)
     sys.exit(255)
