@@ -61,14 +61,16 @@ elif cmdargv[0].startswith('git'):
     if 2 != len(cmdargv):
         sys.stderr.write('Bad command line "{}"'.format(" ".join(cmdargv)))
         sys.exit(255)
+    print("{}".format(" ".join(cmdargv)))
     import subprocess
-    subprocess.call(cmdargv,
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    shell=False
-                    )
-    sys.exit(exit_status)
+    serv = subprocess.Popen(cmdargv,
+                            #stdin=subprocess.PIPE,
+                            #stdout=subprocess.PIPE,
+                            #stderr=subprocess.PIPE,
+                            shell=False
+                            )
+    serv.communicate()
+    sys.exit(serv.returncode)
 else:
     sys.stderr.write('Illegal command "%s"\n' % orig_cmd)
     sys.exit(255)
