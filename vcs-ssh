@@ -7,9 +7,9 @@
 #
 # This software may be used and distributed according to the terms of the
 # GNU General Public License version 2 or any later version.
-
 """
-hg-ssh - a wrapper for ssh access to a limited set of mercurial repos
+vcs-ssh - a Git and Mercurial wrapper to grant access to a selected set of
+          reposotories.
 
 To be used in ~/.ssh/authorized_keys with the "command" option, see sshd(8):
 command="hg-ssh path/to/repo1 /path/to/repo2 ~/repo3 ~user/repo4" ssh-dss ...
@@ -23,55 +23,101 @@ allow shorter paths with:
 command="cd path/to/my/repositories && hg-ssh repo1 subdir/repo2"
 
 You can use pattern matching of your normal shell, e.g.:
-command="cd repos && hg-ssh user/thomas/* projects/{mercurial,foo}"
+command="vcs-ssh user/thomas/* projects/{mercurial,foo}"
 """
-
-# enable importing on demand to reduce startup time
+import sys
+import os
+import shlex
+import argparse
+import subprocess
 from mercurial import demandimport; demandimport.enable()
-
 from mercurial import dispatch
 
-import sys, os, shlex
 
-cwd = os.getcwd()
-allowed_paths = [os.path.normpath(os.path.join(cwd, os.path.expanduser(path)))
-                 for path in sys.argv[1:]]
-orig_cmd = os.getenv('SSH_ORIGINAL_COMMAND', '?')
-try:
-    cmdargv = shlex.split(orig_cmd)
-except ValueError, e:
-    sys.stderr.write('Illegal command "%s": %s\n' % (orig_cmd, e))
-    sys.exit(255)
+def rejectpush(ui, **kwargs):
+    """Mercurial hook to reject push if repository is read-only."""
+    ui.warn("Permission denied\n")
+    # mercurial hooks use unix process conventions for hook return values
+    # so a truthy return means failure
+    return True
 
-if cmdargv[:2] == ['hg', '-R'] and cmdargv[3:] == ['serve', '--stdio']:
-    path = cmdargv[2]
-    repo = os.path.normpath(os.path.join(cwd, os.path.expanduser(path)))
-    if repo in allowed_paths:
-        dispatch.dispatch(dispatch.request(['-R', repo, 'serve', '--stdio']))
+
+def main(read_only=False, allowed_paths=None):
+    orig_cmd = os.getenv('SSH_ORIGINAL_COMMAND', '?')
+    try:
+        cmdargv = shlex.split(orig_cmd)
+    except ValueError, e:
+        sys.stderr.write('Illegal command "%s": %s\n' % (orig_cmd, e))
+        sys.exit(255)
+
+    if cmdargv[:2] == ['hg', '-R'] and cmdargv[3:] == ['serve', '--stdio']:
+        path = cmdargv[2]
+        repo = os.path.normpath(os.path.join(cwd, os.path.expanduser(path)))
+        rewrote_command = ['-R', repo, 'serve', '--stdio']
+        if args.READ_ONLY is True:
+            rewrote_command += [
+                                '--config',
+                                'hooks.prechangegroup.hg-ssh=python:__main__.rejectpush',
+                                '--config',
+                                'hooks.prepushkey.hg-ssh=python:__main__.rejectpush'
+                                ]
+        if repo in allowed_paths:
+            dispatch.dispatch(dispatch.request(rewrote_command))
+        else:
+            sys.stderr.write('Illegal repository "%s"\n' % repo)
+            sys.exit(255)
+    elif cmdargv[0].startswith('git'):
+        path = cmdargv[1]
+        if (read_only is True
+            and "git-receive-pack" == cmdargv[0]
+            ):
+            sys.stderr("You only have read only access to this repository: you "
+                    "cannot push anything into it !")
+            sys.stderr(255)
+        repo = os.path.normpath(os.path.join(cwd, os.path.expanduser(path)))
+        if repo not in allowed_paths:
+            sys.stderr.write('Illegal repository "{}"\n'.format(repo))
+            sys.exit(255)
+        if 2 != len(cmdargv):
+            sys.stderr.write('Bad command line "{}"'.format(" ".join(cmdargv)))
+            sys.exit(255)
+        cmdargv[1] = repo
+
+        serv = subprocess.Popen(cmdargv,
+                                #stdin=subprocess.PIPE,
+                                #stdout=subprocess.PIPE,
+                                #stderr=subprocess.PIPE,
+                                shell=False
+                                )
+        serv.communicate()
+        sys.exit(serv.returncode)
+    elif "svnserve -t" == orig_cmd:
+        sys.stderr.write('Warning: using Subversion no access control enforced!\n')
+        serv = subprocess.Popen(cmdargv, shell=False)
+        serv.communicate()
+        sys.exit(serv.returncode)
     else:
-        sys.stderr.write('Illegal repository "%s"\n' % repo)
+        sys.stderr.write('Illegal command "%s"\n' % orig_cmd)
         sys.exit(255)
-elif cmdargv[0].startswith('git'):
-    path = cmdargv[1]
-    repo = os.path.normpath(os.path.join(cwd, os.path.expanduser(path)))
-    cmdargv[1] = repo
-    if repo not in allowed_paths:
-        sys.stderr.write('Illegal repository "{}"\n'.format(repo))
-        sys.exit(255)
-    if 2 != len(cmdargv):
-        sys.stderr.write('Bad command line "{}"'.format(" ".join(cmdargv)))
-        sys.exit(255)
-    print("{}".format(" ".join(cmdargv)))
-    import subprocess
-    serv = subprocess.Popen(cmdargv,
-                            #stdin=subprocess.PIPE,
-                            #stdout=subprocess.PIPE,
-                            #stderr=subprocess.PIPE,
-                            shell=False
-                            )
-    serv.communicate()
-    sys.exit(serv.returncode)
-else:
-    sys.stderr.write('Illegal command "%s"\n' % orig_cmd)
-    sys.exit(255)
+
+
+if '__main__' == __name__:
+    parser = argparse.ArgumentParser(description='Share multiple repositories'
+                                     ' of different kinds on a single user '
+                                     'account.',
+                                     add_help=True)
+    parser.add_argument('--read-only', type=bool, dest='READ_ONLY',
+                        default=False,
+                        help="Grant read access to the repository but no write")
+    parser.add_argument('allowed_paths', metavar='PATH', action='append',
+                        help='a path to a repository', nargs='+')
+    # parser.add_argument('--scp-only', type=bool, dest='SCP_ONLY',
+    args = parser.parse_args()
+    cwd = os.getcwd()
+    # TODO: args.allowed_paths contains a list in a list don't know why.
+    allowed_paths = [os.path.normpath(os.path.join(cwd,
+                                                   os.path.expanduser(path)))
+                     for path in args.allowed_paths[0]]
+
+    main(read_only=args.READ_ONLY, allowed_paths=allowed_paths)
 
