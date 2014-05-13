@@ -64,22 +64,22 @@ def main(read_only=False, allowed_paths=None):
         if repo in allowed_paths:
             dispatch.dispatch(dispatch.request(rewrote_command))
         else:
-            sys.stderr.write('Illegal repository "%s"\n' % repo)
+            sys.stderr.write('remote: Illegal repository "%s"\n' % repo)
             sys.exit(255)
     elif cmdargv[0].startswith('git'):
         path = cmdargv[1]
         if (read_only is True
             and "git-receive-pack" == cmdargv[0]
             ):
-            sys.stderr.write("You only have read only access to this repository: you "
-                    "cannot push anything into it !")
+            sys.stderr.write("remote: \033[1;41mYou only have read only access to this "
+                    "repository\033[0m: you cannot push anything into it !\n")
             sys.exit(255)
         repo = os.path.normpath(os.path.join(cwd, os.path.expanduser(path)))
         if repo not in allowed_paths:
-            sys.stderr.write('Illegal repository "{}"\n'.format(repo))
+            sys.stderr.write('remote: Illegal repository "{}"\n'.format(repo))
             sys.exit(255)
         if 2 != len(cmdargv):
-            sys.stderr.write('Bad command line "{}"'.format(" ".join(cmdargv)))
+            sys.stderr.write('remote: Bad command line "{}"'.format(" ".join(cmdargv)))
             sys.exit(255)
         cmdargv[1] = repo
 
@@ -92,12 +92,12 @@ def main(read_only=False, allowed_paths=None):
         serv.communicate()
         sys.exit(serv.returncode)
     elif "svnserve -t" == orig_cmd:
-        sys.stderr.write('Warning: using Subversion no access control enforced!\n')
+        sys.stderr.write('remote: Warning: using Subversion no access control enforced!\n')
         serv = subprocess.Popen(cmdargv, shell=False)
         serv.communicate()
         sys.exit(serv.returncode)
     else:
-        sys.stderr.write('Illegal command "%s"\n' % orig_cmd)
+        sys.stderr.write('remote: Illegal command "%s"\n' % orig_cmd)
         sys.exit(255)
 
 
