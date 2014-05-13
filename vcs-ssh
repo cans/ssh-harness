@@ -71,9 +71,9 @@ def main(read_only=False, allowed_paths=None):
         if (read_only is True
             and "git-receive-pack" == cmdargv[0]
             ):
-            sys.stderr("You only have read only access to this repository: you "
+            sys.stderr.write("You only have read only access to this repository: you "
                     "cannot push anything into it !")
-            sys.stderr(255)
+            sys.exit(255)
         repo = os.path.normpath(os.path.join(cwd, os.path.expanduser(path)))
         if repo not in allowed_paths:
             sys.stderr.write('Illegal repository "{}"\n'.format(repo))
