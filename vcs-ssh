@@ -1,123 +1,23 @@
 #!/usr/bin/python
+# -*- coding: utf-8-unix; -*-
 #
-# Copyright 2005-2007 by Intevation GmbH <intevation@intevation.de>
+# Copyright © 2013-2014, Nicolas CANIART <nicolas@caniart.net>
 #
 # Author(s):
-# Thomas Arendsen Hein <thomas@intevation.de>
+#   Nicolas CANIART <nicolas@caniart.net>
 #
 # This software may be used and distributed according to the terms of the
 # GNU General Public License version 2 or any later version.
-"""
-vcs-ssh - a Git and Mercurial wrapper to grant access to a selected set of
-          reposotories.
-
-To be used in ~/.ssh/authorized_keys with the "command" option, see sshd(8):
-command="hg-ssh path/to/repo1 /path/to/repo2 ~/repo3 ~user/repo4" ssh-dss ...
-(probably together with these other useful options:
- no-port-forwarding,no-X11-forwarding,no-agent-forwarding)
-
-This allows pull/push over ssh from/to the repositories given as arguments.
-
-If all your repositories are subdirectories of a common directory, you can
-allow shorter paths with:
-command="cd path/to/my/repositories && hg-ssh repo1 subdir/repo2"
-
-You can use pattern matching of your normal shell, e.g.:
-command="vcs-ssh user/thomas/* projects/{mercurial,foo}"
-"""
+#
 import sys
-import os
-import shlex
-import argparse
-import subprocess
-from mercurial import demandimport; demandimport.enable()
-from mercurial import dispatch
 
-
-def rejectpush(ui, **kwargs):
-    """Mercurial hook to reject push if repository is read-only."""
-    ui.warn("Permission denied\n")
-    # mercurial hooks use unix process conventions for hook return values
-    # so a truthy return means failure
-    return True
-
-
-def main(read_only=False, allowed_paths=None):
-    orig_cmd = os.getenv('SSH_ORIGINAL_COMMAND', '?')
-    try:
-        cmdargv = shlex.split(orig_cmd)
-    except ValueError, e:
-        sys.stderr.write('Illegal command "%s": %s\n' % (orig_cmd, e))
-        sys.exit(255)
-
-    if cmdargv[:2] == ['hg', '-R'] and cmdargv[3:] == ['serve', '--stdio']:
-        path = cmdargv[2]
-        repo = os.path.normpath(os.path.join(cwd, os.path.expanduser(path)))
-        rewrote_command = ['-R', repo, 'serve', '--stdio']
-        if args.READ_ONLY is True:
-            rewrote_command += [
-                                '--config',
-                                'hooks.prechangegroup.hg-ssh=python:__main__.rejectpush',
-                                '--config',
-                                'hooks.prepushkey.hg-ssh=python:__main__.rejectpush'
-                                ]
-        if repo in allowed_paths:
-            dispatch.dispatch(dispatch.request(rewrote_command))
-        else:
-            sys.stderr.write('remote: Illegal repository "%s"\n' % repo)
-            sys.exit(255)
-    elif cmdargv[0].startswith('git'):
-        path = cmdargv[1]
-        if (read_only is True
-            and "git-receive-pack" == cmdargv[0]
-            ):
-            sys.stderr.write("remote: \033[1;41mYou only have read only access to this "
-                    "repository\033[0m: you cannot push anything into it !\n")
-            sys.exit(255)
-        repo = os.path.normpath(os.path.join(cwd, os.path.expanduser(path)))
-        if repo not in allowed_paths:
-            sys.stderr.write('remote: Illegal repository "{}"\n'.format(repo))
-            sys.exit(255)
-        if 2 != len(cmdargv):
-            sys.stderr.write('remote: Bad command line "{}"'.format(" ".join(cmdargv)))
-            sys.exit(255)
-        cmdargv[1] = repo
-
-        serv = subprocess.Popen(cmdargv,
-                                #stdin=subprocess.PIPE,
-                                #stdout=subprocess.PIPE,
-                                #stderr=subprocess.PIPE,
-                                shell=False
-                                )
-        serv.communicate()
-        sys.exit(serv.returncode)
-    elif "svnserve -t" == orig_cmd:
-        sys.stderr.write('remote: Warning: using Subversion no access control enforced!\n')
-        serv = subprocess.Popen(cmdargv, shell=False)
-        serv.communicate()
-        sys.exit(serv.returncode)
-    else:
-        sys.stderr.write('remote: Illegal command "%s"\n' % orig_cmd)
-        sys.exit(255)
+from vcs_ssh import parse_args, main
 
 
 if '__main__' == __name__:
-    parser = argparse.ArgumentParser(description='Share multiple repositories'
-                                     ' of different kinds on a single user '
-                                     'account.',
-                                     add_help=True)
-    parser.add_argument('--read-only', type=bool, dest='READ_ONLY',
-                        default=False,
-                        help="Grant read access to the repository but no write")
-    parser.add_argument('allowed_paths', metavar='PATH', action='append',
-                        help='a path to a repository', nargs='+')
-    # parser.add_argument('--scp-only', type=bool, dest='SCP_ONLY',
-    args = parser.parse_args()
-    cwd = os.getcwd()
-    # TODO: args.allowed_paths contains a list in a list don't know why.
-    allowed_paths = [os.path.normpath(os.path.join(cwd,
-                                                   os.path.expanduser(path)))
-                     for path in args.allowed_paths[0]]
+    args = parse_args(sys.argv[1:])
+    sys.exit(main(**args))
 
-    main(read_only=args.READ_ONLY, allowed_paths=allowed_paths)
+
+# vim: syntax:tw=4:sw=4:et:
 
