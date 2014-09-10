@@ -45,8 +45,13 @@ def rejectpush(ui, **kwargs):
     return True
 
 
-def rejectrepo():
+def rejectrepo(repo):
     stderr.write('remote: Illegal repository "{}"\n'.format(repo))
+    return 255
+
+
+def rejectcommand(command, extra=""):
+    stderr.write('Illegal command "%s": %s\n' % (command, extra))
     return 255
 
 
@@ -60,14 +65,15 @@ def git_handle(cmdargv, rw_dirs, ro_dirs):
             'remote: Bad command line "{}"'.format(" ".join(cmdargv)))
         return 255
 
+    # Is the given repository path valid at all ?
+    if repo not in rw_dirs + ro_dirs:
+        return rejectrepo(repo)
+
+    # Moreover is it read-only ?
     if repo in ro_dirs and "git-receive-pack" == cmdargv[0]:
         stderr.write(
             "remote: \033[1;41mYou only have read only access to this "
             "repository\033[0m: you cannot push anything into it !\n")
-        return 255
-
-    elif repo not in rw_dirs:
-        stderr.write('remote: Illegal repository "{}"\n'.format(repo))
         return 255
 
     cmdargv[1] = repo
@@ -155,12 +161,11 @@ def main(rw_dirs=None, ro_dirs=None):
     try:
         cmdargv = shlex.split(orig_cmd)
     except ValueError as e:
-        stderr.write('Illegal command "%s": %s\n' % (orig_cmd, e))
-        return 255
+        return rejectcommand(cmd, e)
 
     if cmdargv[:2] == ['hg', '-R'] and cmdargv[3:] == ['serve', '--stdio']:
         return handle_hg(cmdargv, rw_dirs, ro_dirs)
-    elif cmdargv[0].startswith('git'):
+    elif 'git-receive-pack' == cmdargv[0] or 'git-upload-pack' == cmdargv[0]:
         return handle_git(cmdargv, rw_dirs, ro_dirs)
     elif "svnserve -t" == orig_cmd:
         stderr.write(
