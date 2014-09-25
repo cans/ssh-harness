@@ -4,11 +4,15 @@
 #
 
 import os
-from unittest import TestLoader, TextTestRunner
+from unittest import TestLoader
+try:
+    from tap import TAPTestRunner as TestRunner
+except ImportError:
+    from unittest import TextTestRunner as TestRunner
 
 path = os.path.dirname(__file__)
-TextTestRunner(verbosity=2).run(
+TestRunner(verbosity=2).run(
     TestLoader().discover('./', pattern='test_*.py'))
 
 
-# vim: syntax:tw=4:sw=4:et:
+# vim: syntax=python:sws=4:sw=4:et:
