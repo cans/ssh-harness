@@ -135,6 +135,10 @@ class BaseSshClientTestCase(TestCase):
        - Provide means set autorized key options on a per-test basis.
 
        - What about the SFTP subsystem ? (Should be disable by default)
+
+       - Append some random ascii bytes to the SSH_CONFIG_{OPEN,CLOSE}_TAG
+         values so that tests can be nested or ran concurrently (there surely
+         is more to do to achieve that but it is still one required bit).
     """
 
     try:
