@@ -25,8 +25,11 @@ class BaseSshClientTestCase(TestCase):
 
     for the SSH daemon to be started. As well as:
 
-    - a key pair for the current user
-    - and generating an authorized_keys file
+    - a key pair
+    - an authorized_keys file
+    - adds an entry for the new home ~/.ssh_config file
+
+    for the current user
 
     All those data are, by default written and stored in a
     'tests/fixtures/sshd' directory within the working directory of the
@@ -151,6 +154,8 @@ class BaseSshClientTestCase(TestCase):
     SSHD_BIN = '/usr/sbin/sshd'
     SSH_KEYSCAN_BIN = '/usr/bin/ssh-keyscan'
     SSH_KEYGEN_BIN = '/usr/bin/ssh-keygen'
+    SSH_CONFIG_HOST_NAME = 'test-harness'
+    UPDATE_SSH_CONFIG = True
 
     AUTHORIZED_KEY_OPTIONS = None
 
@@ -173,6 +178,9 @@ class BaseSshClientTestCase(TestCase):
         'ecdsa': '256',
         }
     _AUTH_METHODS = ('password_auth', 'pubkey_auth', )
+    _SSH_CONFIG_PATH = os.path.expanduser('~/.ssh/config')
+    _SSH_CONFIG_OPEN_TAG= '# BEGIN TEST-HARNES CONFIG'
+    _SSH_CONFIG_CLOSE_TAG= '# END TEST-HARNES CONFIG'
     _SSHD_CONFIG = '''# ssh_harness generated configuration file
 Port {port}
 ListenAddress {address}
@@ -314,7 +322,15 @@ UsePAM yes
 
         # Set the TCP port and IP address the daemon will listen to.
         args.update({'port': cls.PORT,
-                     'address': cls.BIND_ADDRESS, })
+                     'address': cls.BIND_ADDRESS,
+                     })
+        # Sets some options used to update the current user's ~/.ssh/config
+        # file.
+        args.update({'ssh_config_host_name': cls.SSH_CONFIG_HOST_NAME,
+                     'identity': cls.USER_RSA_KEY_PATH,
+                     'ssh_config_open_tag': cls._SSH_CONFIG_OPEN_TAG,
+                     'ssh_config_close_tag': cls._SSH_CONFIG_CLOSE_TAG,
+                     })
 
         # En- or disables PublicKey and Password authentication methods.
         args.update(dict(zip(
@@ -331,6 +347,45 @@ UsePAM yes
         assert 0 == cls._SSHD
 
     @classmethod
+    def _update_ssh_config(cls, args):
+        if cls.UPDATE_SSH_CONFIG is False:
+            return
+        with open(cls._SSH_CONFIG_PATH, 'a') as user_config:
+            user_config.write('''{ssh_config_open_tag}
+Host {ssh_config_host_name}
+        HostName {address}
+        Port {port}
+        IdentityFile {identity}
+{ssh_config_close_tag}
+'''.format(**args))
+
+    @classmethod
+    def _restore_ssh_config(cls):
+        restored_path = '{}.cleaned'.format(cls._SSH_CONFIG_PATH)
+        with open(restored_path, 'w+') as restored:
+            skip = False
+            with open(cls._SSH_CONFIG_PATH, 'r') as modified:
+                for line in modified:
+                    stripped_line = line.strip()
+                    if cls._SSH_CONFIG_OPEN_TAG == stripped_line:
+                        skip = True
+
+                    if skip is False:
+                        restored.write(line)
+
+                    if cls._SSH_CONFIG_CLOSE_TAG == stripped_line:
+                        skip = False
+        try:
+            os.rename(restored_path, cls._SSH_CONFIG_PATH)
+        except OSError as e:
+            try:
+                # For windows.
+                os.remove(cls._SSH_CONFIG_PATH)
+                os.rename(restored_path, cls._SSH_CONFIG_PATH)
+            except OSError:
+                pass
+
+    @classmethod
     def _update_user_known_hosts(cls):
         """Updates the user's `~/.ssh/known_hosts' file to prevent to be
         prompted to validate the server's host key.
@@ -344,7 +399,7 @@ UsePAM yes
             shutil.copyfile(cls._KNOWN_HOSTS_PATH,
                             '{}.back'.format(cls._KNOWN_HOSTS_PATH))
             cls._HAVE_KNOWN_HOSTS = True
-        with open(cls._KNOWN_HOSTS_PATH, 'a') as known_hosts:
+        with open(cls._KNOWN_HOSTS_PATH, 'ab') as known_hosts:
             with open('/dev/null', 'a') as DEVNULL:
                 keyscanner = subprocess.Popen([
                     'ssh-keyscan', '-H4', '-p', str(cls.PORT),
@@ -367,6 +422,9 @@ UsePAM yes
         cls._generate_keys()
         cls._generate_authzd_keys_file()
         cls._start_sshd()
+
+        if cls.UPDATE_SSH_CONFIG is True:
+            cls._update_ssh_config(args)
 
         # We use ssh-keyscan and thus need SSHD to be up and running.
         cls._update_user_known_hosts()
@@ -399,6 +457,8 @@ UsePAM yes
             if f.endswith('_KEY'):
                 file = '{}.pub'.format(getattr(cls, '{}_PATH'.format(f)))
                 cls._delete_file(file)
+        if cls.UPDATE_SSH_CONFIG is True:
+            cls._restore_ssh_config()
 
 
 class PubKeyAuthSshClientTestCase(BaseSshClientTestCase):
