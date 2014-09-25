@@ -164,9 +164,9 @@ def main(rw_dirs=None, ro_dirs=None):
         return rejectcommand(cmd, e)
 
     if cmdargv[:2] == ['hg', '-R'] and cmdargv[3:] == ['serve', '--stdio']:
-        return handle_hg(cmdargv, rw_dirs, ro_dirs)
+        return hg_handle(cmdargv, rw_dirs, ro_dirs)
     elif 'git-receive-pack' == cmdargv[0] or 'git-upload-pack' == cmdargv[0]:
-        return handle_git(cmdargv, rw_dirs, ro_dirs)
+        return git_handle(cmdargv, rw_dirs, ro_dirs)
     elif "svnserve -t" == orig_cmd:
         stderr.write(
             'remote: Warning: using Subversion no access control enforced!\n')
