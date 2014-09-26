@@ -1,4 +1,7 @@
 # -*- coding: utf-8-unix; -*-
+#
+# Copyright © 2014, Nicolas CANIART <nicolas@caniart.net>
+#
 from __future__ import print_function
 from unittest import TestCase
 import errno
@@ -110,6 +113,18 @@ class BaseSshClientTestCase(TestCase):
     value must be a string that contain valid options (the string you provide
     is not validated).
 
+    ===Environment variables===
+
+    You ask SSHD to set certain environment variables for you upon connection.
+    To specify those you need to override the ``SSH_ENVIRONMENT`` class
+    attribute. It is a dictionary which keys are the names of the environment
+    variables to set and values will be the value of the environment variable
+    value.
+
+    By default the dictionary is empty, and use of environment variables is
+    disabled in SSHD configuration. Adding one or more key/value pair to the
+    dictionnary implicitly enables their use.
+
     .. todo::
 
        - Improve reporting problems internal to this testcase class. As most
@@ -159,6 +174,8 @@ class BaseSshClientTestCase(TestCase):
     SSH_KEYSCAN_BIN = '/usr/bin/ssh-keyscan'
     SSH_KEYGEN_BIN = '/usr/bin/ssh-keygen'
     SSH_CONFIG_HOST_NAME = 'test-harness'
+    SSH_ENVIRONMENT = {}
+    SSH_ENVIRONMENT_FILE = False
     UPDATE_SSH_CONFIG = True
 
     AUTHORIZED_KEY_OPTIONS = None
@@ -209,7 +226,7 @@ StrictModes yes
 RSAAuthentication yes
 PubkeyAuthentication {pubkey_auth}
 AuthorizedKeysFile	{authorized_keys_path}
-PermitUserEnvironment yes
+PermitUserEnvironment {permit_environment}
 
 IgnoreRhosts yes
 RhostsRSAAuthentication no
@@ -298,11 +315,40 @@ UsePAM yes
                     os.chmod(key_file, cls._KEY_FILES_MODE)
 
     @classmethod
+    def _get_environment_path(cls):
+        regular_path = os.path.expanduser('~/.ssh/environment')
+        new_path = '{}.test-harness'.format(regular_path)
+        backup_path = '{}.test-harness-backup'.format(regular_path)
+        return regular_path, new_path, backup_path
+
+    @classmethod
+    def _generate_environment_file(cls):
+        if cls.SSH_ENVIRONMENT_FILE is False:
+            return
+        regular_path, new_path, backup_path = cls._get_environment_path()
+
+        with open(new_path) as f:
+            for k, v in cls.SSH_ENVIRONMENT.items():
+                print("{}={}".format(k, v), file=f)
+
+        if os.path.isfile(regular_path):
+            os.mv(regular_path, backup_path)
+        os.mv(new_path, regular_path)
+
+    @classmethod
     def _generate_authzd_keys_file(cls):
         # Generate the authorized_key file with the newly created key in it.
         with open(cls.AUTHORIZED_KEYS_PATH, 'w') as authzd_file:
             with open('{}.pub'.format(cls.USER_RSA_KEY_PATH), 'r') as user_key:
                 key = user_key.read()
+            if cls.SSH_ENVIRONMENT and cls.SSH_ENVIRONMENT_FILE is False:
+                env = ','.join([
+                    'environment="{}={}"'.format(*x)
+                    for x in cls.SSH_ENVIRONMENT.items()])
+                if cls.AUTHORIZED_KEY_OPTIONS is not None:
+                    cls.AUTHORIZED_KEY_OPTIONS += ',' + env
+                else:
+                    cls.AUTHORIZED_KEY_OPTIONS = env
             if cls.AUTHORIZED_KEY_OPTIONS is not None:
                 authzd_file.write("{} ".format(cls.AUTHORIZED_KEY_OPTIONS))
             authzd_file.write("{}\n".format(key))
@@ -342,6 +388,8 @@ UsePAM yes
             cls._AUTH_METHODS,
             ['yes' if x is True else 'no' for x in cls.USE_AUTH_METHOD])))
 
+        args.update({
+            'permit_environment': 'yes' if cls.SSH_ENVIRONMENT else 'no', })
         return args
 
     @classmethod
@@ -426,6 +474,7 @@ Host {ssh_config_host_name}
         cls._generate_sshd_config(args)
         cls._generate_keys()
         cls._generate_authzd_keys_file()
+        cls._generate_environment_file()
         cls._start_sshd()
 
         if cls.UPDATE_SSH_CONFIG is True:
@@ -474,61 +523,6 @@ class PubKeyAuthSshClientTestCase(BaseSshClientTestCase):
 class PasswdAuthSshClientTestCase(BaseSshClientTestCase):
 
     USE_AUTH_METHOD = BaseSshClientTestCase.AUTH_METHOD_PASSWORD
-
-
-# class SshClientTestCase(TestCase):
-
-#     SSHD_PORT = 2200
-#     SSHD_BIND_ADDRESS = 'localhost'
-#     SSHD_PUBLIC_KEY = './sshd/id_rsa.pub'
-#     SSHD_PRIVATE_KEY = './sshd/id_rsa'
-#     sshd_user_public_keys = ['~/.ssh/id_rsa.pub',
-#                              '~/.ssh/id_dsa.pub',
-#                              ]
-
-#     def setUp(self):
-#         # import sshd
-#         sshd_path = os.path.dirname(
-#             getattr(sshd, '__source__',
-#                     getattr(sshd, '__file__', None)))
-#         print("SSHD Module Path: {}".format(sshd_path))
-#         command = ['python', '-m', 'sshd', ]
-#         if self.SSHD_PORT is not None:
-#             command += ['-p', str(self.SSHD_PORT), ]
-#         if self.SSHD_BIND_ADDRESS is not None:
-#             command += ['-b', self.SSHD_BIND_ADDRESS, ]
-#         if self.SSHD_PUBLIC_KEY:
-#             command += ['-k', self.SSHD_PUBLIC_KEY, ]
-#         if self.SSHD_PRIVATE_KEY is not None:
-#             command += ['-K', self.SSHD_PRIVATE_KEY, ]
-
-#         # if 0 == os.fork():
-#             # self._sshd = subprocess.Popen(command,
-#             #                           cwd=sshd_path)
-#             # self._sshd.communicate()
-#             # print(self._sshd)
-#         #     pass
-#         # else:
-#         time.sleep(1)
-
-#     def tearDown(self):
-#         # if self._sshd.returncode is None:
-#         #     print("Terminate -> {}".format(self._sshd.terminate()))
-#         # self._sshd.wait()
-#         # print("SSHD return code: {}".format(self._sshd.returncode))
-#         pass
-
-#     def test_ssh_connection(self):
-#         p = subprocess.Popen(['ssh', '-p', str(self.SSHD_PORT), 'ncaniart@amboss', ],
-#                              stdin=subprocess.PIPE,
-#                              stdout=subprocess.PIPE,
-#                              stderr=subprocess.PIPE,
-#                              shell=False)
-#         out, err = p.communicate(input='\x04\r\n')
-#         print("Standard output:\n\033[1;35m{}\033[0m"
-#               "Standard error:\n\033[1;35m{}\033[0m".format(out, err))
-#         print("Return code: {}".format(p.returncode))
-#         # print("SSHD return code: {}".format(self._sshd.returncode))        
 
 
 # vim: syntax=python:sws=4:sw=4:et:
