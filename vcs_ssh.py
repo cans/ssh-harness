@@ -7,7 +7,8 @@
 #   Nicolas CANIART <nicolas@caniart.net>
 #
 # This software may be used and distributed according to the terms of the
-# GNU General Public License version 2 or any later version.
+# GNU General Public License version 2.
+#
 """
 vcs-ssh - a Git and Mercurial wrapper to grant access to a selected set of
           reposotories.
@@ -30,11 +31,12 @@ import argparse
 import os
 import shlex
 import subprocess
-from sys import stderr
+from sys import stderr, version_info as VERSION_INFO
 
-from mercurial import demandimport
-demandimport.enable()
-from mercurial import dispatch
+if (3, 0, 0) > VERSION_INFO:
+    from mercurial import demandimport
+    demandimport.enable()
+    from mercurial import dispatch
 
 
 def rejectpush(ui, **kwargs):
@@ -46,19 +48,21 @@ def rejectpush(ui, **kwargs):
 
 
 def rejectrepo(repo):
-    stderr.write('remote: Illegal repository "{}"\n'.format(repo))
+    stderr.write('Illegal repository "{}"\n'.format(repo))
     return 255
 
 
 def rejectcommand(command, extra=""):
-    stderr.write('Illegal command "%s": %s\n' % (command, extra))
+    if extra:
+        extra = ": {}".format(extra)
+    stderr.write('remote: Illegal command "{}"{}\n'.format(command, extra))
     return 255
 
 
 def git_handle(cmdargv, rw_dirs, ro_dirs):
     cwd = os.getcwd()
     path = cmdargv[1]
-    repo = os.path.normpath(os.path.join(cwd, os.path.expanduser(path)))
+    repo = os.path.abspath(os.path.normpath(os.path.expanduser(path)))
 
     if 2 != len(cmdargv):
         stderr.write(
@@ -82,10 +86,9 @@ def git_handle(cmdargv, rw_dirs, ro_dirs):
 
 def hg_handle(cmdargv, rw_dirs, ro_dirs):
     do_dispatch = False
-    cwd = os.getcwd()
 
     path = cmdargv[2]
-    repo = os.path.normpath(os.path.join(cwd, os.path.expanduser(path)))
+    repo = os.path.abspath(os.path.normpath(os.path.expanduser(path)))
     rewrote_command = ['-R', repo, 'serve', '--stdio']
 
     if repo in ro_dirs:
@@ -105,9 +108,13 @@ def hg_handle(cmdargv, rw_dirs, ro_dirs):
     else:
         return rejectrepo(repo)
 
-
-def hg_dispatch(cmdargv):
-    return dispatch.dispatch(dispatch.request(cmd))
+if (3, 0, 0) > VERSION_INFO:
+    def hg_dispatch(cmdargv):
+        return dispatch.dispatch(dispatch.request(cmdargv))
+else:
+    # mercurial not ported to Python 3 yet (and they have no plan to do so !)
+    def hg_dispatch(cmdargv):
+        pipe_dispatch(['hg', ] + cmdargv)
 
 
 def pipe_dispatch(cmd):
@@ -146,8 +153,8 @@ def parse_args(argv):
         key = v.lower()
         if 'M' == v[0]:
             key = key[5:]
-        args[key] += [os.path.normpath(os.path.join(cwd,
-                                                    os.path.expanduser(path)))
+        args[key] += [os.path.abspath(
+                          os.path.normpath(os.path.expanduser(path)))
                       for path in getattr(parsed_args, v, [])]
 
     return args
@@ -172,8 +179,7 @@ def main(rw_dirs=None, ro_dirs=None):
             'remote: Warning: using Subversion no access control enforced!\n')
         return pipe_dispatch(cmdargv)
     else:
-        stderr.write('remote: Illegal command "%s"\n' % orig_cmd)
-        return 255
+        return rejectcommand(orig_cmd)
 
 
-# vim: syntax:tw=4:sw=4:et:
+# vim: syntax=python:sws=4:sw=4:et:
