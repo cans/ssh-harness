@@ -1,0 +1,10 @@
+language: python
+python:
+  - "3.4"
+  - "3.3"
+  - "2.7"
+install:
+  - "apt-get install -qq openssh-server"
+  - "pip install coverage"
+script:
+  - "python-coverage run -m -p --source vcs_ssh.py,vcs-ssh tests"

@@ -2,7 +2,6 @@
 #
 # Copyright © 2014, Nicolas CANIART <nicolas@caniart.net>
 #
-
 import os
 from unittest import TestLoader
 try:
