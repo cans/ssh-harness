@@ -209,6 +209,7 @@ StrictModes yes
 RSAAuthentication yes
 PubkeyAuthentication {pubkey_auth}
 AuthorizedKeysFile	{authorized_keys_path}
+PermitUserEnvironment yes
 
 IgnoreRhosts yes
 RhostsRSAAuthentication no
