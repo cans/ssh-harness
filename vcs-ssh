@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # -*- coding: utf-8-unix; -*-
 #
 # Copyright © 2013-2014, Nicolas CANIART <nicolas@caniart.net>
@@ -9,15 +9,22 @@
 # This software may be used and distributed according to the terms of the
 # GNU General Public License version 2 or any later version.
 #
+import os
 import sys
 
 from vcs_ssh import parse_args, main
 
 
 if '__main__' == __name__:
+    if os.getenv('COVERAGE_PROCESS_START') is not None:
+        try:
+            import coverage
+            coverage.process_startup()
+        except ImportError:
+            pass
     args = parse_args(sys.argv[1:])
     sys.exit(main(**args))
 
 
-# vim: syntax:tw=4:sw=4:et:
+# vim: syntax=python:sws=4:sw=4:et:
 
