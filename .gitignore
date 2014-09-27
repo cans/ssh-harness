@@ -1,7 +1,7 @@
 *~
 *.pyc
 __pycache__
-.coverage
+.coverage*
 htmlcov
 *.tap
 *.swp
