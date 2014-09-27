@@ -5,8 +5,9 @@ python:
   - "2.7"
 before_install:
   - sudo apt-get update -qq
-  - sudo apt-get install -y openssh-server
+  - sudo apt-get install -y openssh-server openssh-client
 install:
   - pip install coverage
+  - pip install mock
 script:
-  - python-coverage run -m -p --source vcs_ssh.py,vcs-ssh tests
+  - ./runtests.sh

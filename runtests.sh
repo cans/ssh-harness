@@ -6,8 +6,15 @@ COVERAGERC="${PACKAGE_PATH}/.coveragerc"
 
 if ! [ -f './vcs_ssh.py' -a -f './vcs-ssh' ]
 then
-    echo "Not where I expected to be !" 1>&2
+    echo 'Not where I expected to be !' 1>&2
 fi
+
+COVERAGE="$(which python-coverage)"
+[ -z "${COVERAGE}" ] && COVERAGE="$(which coverage)"
+[ -z "${COVERAGE}" ] && {                                      \
+  echo 'Cannot find the coverage command !' 1>&2 ;             \
+  exit 1 ;                                                     \
+  }
 
 cat > "${COVERAGERC}" <<EOF
 [run]
@@ -24,6 +31,8 @@ sources=
 
 EOF
 
-coverage run -a -p -m --rcfile "${COVERAGERC}" tests
-coverage combine
-coverage report
+"${COVERAGE}" run -a -p -m --rcfile "${COVERAGERC}" tests
+"${COVERAGE}" combine
+"${COVERAGE}" report
+
+exit 0
