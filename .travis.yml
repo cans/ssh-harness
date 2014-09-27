@@ -3,8 +3,10 @@ python:
   - "3.4"
   - "3.3"
   - "2.7"
+before_install:
+  - sudo apt-get update -qq
+  - sudo apt-get install -y openssh-server
 install:
-  - "apt-get install -qq openssh-server"
-  - "pip install coverage"
+  - pip install coverage
 script:
-  - "python-coverage run -m -p --source vcs_ssh.py,vcs-ssh tests"
+  - python-coverage run -m -p --source vcs_ssh.py,vcs-ssh tests
