@@ -39,12 +39,20 @@ if (3, 0, 0) > VERSION_INFO:
     from mercurial import dispatch
 
 
-def rejectpush(ui, **kwargs):
+def rejectpush(*args, **kwargs):
     """Mercurial hook to reject push if repository is read-only."""
-    ui.warn("Permission denied\n")
-    # mercurial hooks use unix process conventions for hook return values
-    # so a truthy return means failure
-    return True
+    prefix = 'remote: '
+    if 0 < len(args):
+        args[0].warn("Permission denied\n")
+        prefix = ''
+    stderr.write(
+        "{}\033[1;41mYou only have read only access to this "
+        "repository\033[0m: you cannot push anything into it !\n"
+        .format(prefix))
+    # # mercurial hooks use unix process conventions for hook return values
+    # # so a truthy return means failure
+    # return True
+    return 255
 
 
 def rejectrepo(repo):
@@ -64,21 +72,13 @@ def git_handle(cmdargv, rw_dirs, ro_dirs):
     path = cmdargv[1]
     repo = os.path.abspath(os.path.normpath(os.path.expanduser(path)))
 
-    if 2 != len(cmdargv):
-        stderr.write(
-            'remote: Bad command line "{}"'.format(" ".join(cmdargv)))
-        return 255
-
     # Is the given repository path valid at all ?
     if repo not in rw_dirs + ro_dirs:
         return rejectrepo(repo)
 
     # Moreover is it read-only ?
     if repo in ro_dirs and "git-receive-pack" == cmdargv[0]:
-        stderr.write(
-            "remote: \033[1;41mYou only have read only access to this "
-            "repository\033[0m: you cannot push anything into it !\n")
-        return 255
+        return rejectpush()
 
     cmdargv[1] = repo
     return pipe_dispatch(cmdargv)
@@ -153,9 +153,9 @@ def parse_args(argv):
         key = v.lower()
         if 'M' == v[0]:
             key = key[5:]
-        args[key] += [os.path.abspath(
-                          os.path.normpath(os.path.expanduser(path)))
-                      for path in getattr(parsed_args, v, [])]
+        args[key] += [
+            os.path.abspath(os.path.normpath(os.path.expanduser(path)))
+            for path in getattr(parsed_args, v, [])]
 
     return args
 
@@ -168,11 +168,14 @@ def main(rw_dirs=None, ro_dirs=None):
     try:
         cmdargv = shlex.split(orig_cmd)
     except ValueError as e:
-        return rejectcommand(cmd, e)
+        # Python3 deprecated the message attribute on exceptions.
+        return rejectcommand(orig_cmd,
+                             extra=getattr(e, 'message', e))
 
     if cmdargv[:2] == ['hg', '-R'] and cmdargv[3:] == ['serve', '--stdio']:
         return hg_handle(cmdargv, rw_dirs, ro_dirs)
-    elif 'git-receive-pack' == cmdargv[0] or 'git-upload-pack' == cmdargv[0]:
+    elif (('git-receive-pack' == cmdargv[0] or 'git-upload-pack' == cmdargv[0])
+          and 2 == len(cmdargv)):
         return git_handle(cmdargv, rw_dirs, ro_dirs)
     elif "svnserve -t" == orig_cmd:
         stderr.write(
