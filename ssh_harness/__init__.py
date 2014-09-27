@@ -10,6 +10,7 @@ import shutil
 import signal
 import stat
 import subprocess
+import sys
 
 
 class BaseSshClientTestCase(TestCase):
@@ -161,7 +162,7 @@ class BaseSshClientTestCase(TestCase):
     except (AttributeError, NameError):
         MODULE_PATH = os.path.abspath(os.path.dirname(__source__))
     FIXTURE_PATH = os.path.sep.join([
-        os.getcwd(), 'tests', 'fixtures', 'sshd', ])
+        os.path.abspath(os.getcwd()), 'tests', 'fixtures', 'sshd', ])
 
     AUTH_METHOD_PASSWORD = (True, False, )
     AUTH_METHOD_PUBKEY = (False, True, )
@@ -189,15 +190,32 @@ class BaseSshClientTestCase(TestCase):
         'SSHD_CONFIG': 'sshd_config',
         'SSHD_PIDFILE': 'sshd.pid',
         }
+    _MODE_MASK = (stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP
+                  | stat.S_IROTH | stat.S_IXOTH | stat.S_ISVTX)
+    """Mode mask to check the mode of the parent directories of the one
+    the contains the key. The most permission the can have is this:
+    rwxr-xr-x (0755) other wise some other than the owner of the key may
+    ). I am not yet clear on the requirements of the Set-UID, Set-GID,
+    Sticky-bit, etc.
+    """
+    _NEED_CHMOD = []
+    """Collects the paths of the directories on the path to the private keys
+    that need to be chmod-ed before running the tests to they can later be
+    restored.
+    """
+
     _KEY_FILES_MODE = 0x00000000 | stat.S_IRUSR
-    # The sizes of the key to ask with respect to their type (we purposely
-    # request the weakest key sizes possible to not slow the test cases too
-    # much)
+    """Access mode that is set on files containing private keys."""
+
     _BITS = {
         'dsa': '1024',
         'rsa': '768',
         'ecdsa': '256',
         }
+    """The sizes of the key to ask with respect to their type (we purposely
+    request the weakest key sizes possible to not slow the test cases too
+    much."""
+
     _AUTH_METHODS = ('password_auth', 'pubkey_auth', )
     _SSH_CONFIG_PATH = os.path.expanduser('~/.ssh/config')
     _SSH_CONFIG_OPEN_TAG= '# BEGIN TEST-HARNES CONFIG'
@@ -276,8 +294,8 @@ UsePAM yes
     def _delete_file(cls, file):
         # print("  {} ... ".format(file), end='')
         if os.path.isfile(file) is True:
-            with open(file, 'r') as fd:
-                data = fd.read()
+            # with open(file, 'r') as fd:
+            #     data = fd.read()
             os.unlink(file)
             # print("done.")
             # print(data)
@@ -469,9 +487,38 @@ Host {ssh_config_host_name}
                                                errout))
 
     @classmethod
+    def _mode2string(cls, mode):
+        # Python 3 octal notation is 0o<digit> WTF !!
+        return oct(mode).replace('o', '')
+
+    @classmethod
+    def _protect_private_keys(cls):
+        path = cls.FIXTURE_PATH
+        while '/' != path:
+            res = os.stat(path)
+            mode = stat.S_IMODE(res.st_mode)
+            if 0 < (mode & ~cls._MODE_MASK):
+                cls._NEED_CHMOD.append((path, mode, ))
+                subprocess.call([
+                    'sudo',
+                    'chmod',
+                    cls._mode2string(mode & cls._MODE_MASK),
+                    path,
+                    ])
+            path = os.path.dirname(path)
+
+    @classmethod
+    def _restore_modes(cls):
+        for directory, mode in cls._NEED_CHMOD:
+            subprocess.call([
+                'sudo', 'chmod', cls._mode2string(mode), directory,
+                ])
+
+    @classmethod
     def setUpClass(cls):
         args = cls._gather_data()
         cls._generate_sshd_config(args)
+        cls._protect_private_keys()
         cls._generate_keys()
         cls._generate_authzd_keys_file()
         cls._generate_environment_file()
@@ -506,11 +553,18 @@ Host {ssh_config_host_name}
         for f in cls._FILES.keys():
             file = getattr(cls, '{}_PATH'.format(f))
             if file.endswith('.pid'):
-                continue
+                continue  # sshd.pid is normally by sshd when it exits.
             cls._delete_file(file)
             if f.endswith('_KEY'):
+                # Don't forget to remove the public key as well as the
+                # private ones.
                 file = '{}.pub'.format(getattr(cls, '{}_PATH'.format(f)))
                 cls._delete_file(file)
+
+        # Now that we destroyed all keys we can restore the modes of the
+        # directories that were along their path.
+        cls._restore_modes()
+
         if cls.UPDATE_SSH_CONFIG is True:
             cls._restore_ssh_config()
 
