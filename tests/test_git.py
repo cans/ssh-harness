@@ -3,7 +3,6 @@ try:
     from unittest.mock import Mock, patch
 except:
     from mock import Mock, patch
-import multiprocessing
 import os
 from unittest import TestCase
 
@@ -28,6 +27,10 @@ class GitHandleTestCase(TestCase):
         self._pull_command_ro = 'git-upload-pack ROREPO'
         self._pull_command_rw = 'git-upload-pack RWREPO'
         self._pull_command_ko = 'git-upload-pack WRONG'
+
+    def tearDown(self):
+        if 'SSH_ORIG_COMMAND' in os.environ:
+            del os.environ['SSH_ORIG_COMMAND']
 
     def test_git_push_to_rw_repository(self):
         with patch('vcs_ssh.pipe_dispatch') as pipe_dispatch_mock:
@@ -91,3 +94,6 @@ class GitHandleTestCase(TestCase):
                 self._ro_absdirs)
         self.assertEqual(res, 255)
         self.assertFalse(pipe_dispatch_mock.called)
+
+
+# vim: syntax=python:sws=4:sw=4:et:

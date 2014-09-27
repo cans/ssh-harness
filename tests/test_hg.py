@@ -3,7 +3,6 @@ try:
     from unittest.mock import Mock, patch
 except:
     from mock import Mock, patch
-import multiprocessing
 import os
 from unittest import TestCase
 
@@ -52,6 +51,19 @@ class HgHandleTestCase(TestCase):
         self.assertEqual(res, 0)
         hg_dispatch_mock.assert_called_once_with(
             self._push_command_rw[1:])
+
+    def test_hg_push_to_ko_repository(self):
+        with patch('vcs_ssh.rejectrepo') as rejectrepo_mock:
+            rejectrepo_mock.return_value = 255
+            res = hg_handle(
+                self._push_command_ko * 1,
+                [self._rw_absdir, ],
+                [self._ro_absdir, ],)
+
+        # update path to its canonicalized form
+        self.assertEqual(res, 255)
+        rejectrepo_mock.assert_called_once_with(
+            os.path.join(self._cwd, self._ko_dir))
 
     def test_hg_push_to_ca_repository(self):
         with patch('vcs_ssh.hg_dispatch') as hg_dispatch_mock:
