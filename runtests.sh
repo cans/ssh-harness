@@ -32,7 +32,8 @@ sources=
 EOF
 
 "${COVERAGE}" run -a -p -m --rcfile "${COVERAGERC}" tests
+status="$?"
 "${COVERAGE}" combine
 "${COVERAGE}" report
 
-exit 0
+exit ${status}
