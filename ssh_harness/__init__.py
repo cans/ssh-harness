@@ -373,6 +373,8 @@ UsePAM yes
 
     @classmethod
     def _generate_sshd_config(cls, args):
+        if not os.path.isdir(cls.FIXTURE_PATH):
+            os.makedirs(cls.FIXTURE_PATH, mode=493)
         with open(cls.SSHD_CONFIG_PATH, 'w') as f:
             f.write(cls._SSHD_CONFIG.format(**args))
 
