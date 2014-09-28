@@ -9,6 +9,11 @@ then
     echo 'Not where I expected to be !' 1>&2
 fi
 
+if [ -n "${TRAVIS_PYTHON_VERSION}" -a "2" = "${TRAVIS_PYTHON_VERSION:0:1}" ]
+then
+    pip install mercurial
+fi
+
 COVERAGE="$(which python-coverage)"
 [ -z "${COVERAGE}" ] && COVERAGE="$(which coverage)"
 [ -z "${COVERAGE}" ] && {                                      \
@@ -30,6 +35,7 @@ sources=
     /var/lib/buildbot/slaves/*/*/vcs-ssh
 
 EOF
+
 
 "${COVERAGE}" run -a -p -m --rcfile "${COVERAGERC}" tests
 status="$?"
