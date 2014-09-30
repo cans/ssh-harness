@@ -1,4 +1,21 @@
 # -*- coding: utf-8-unix; -*-
+#
+#  Copyright © 2014, Nicolas CANIART <nicolas@caniart.net>
+#
+#  This file is part of vs-ssh.
+#
+#  vs-ssh is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License version 2 as
+#  published by the Free Software Foundation.
+#
+#  vs-ssh is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with vs-ssh.  If not, see <http://www.gnu.org/licenses/>.
+#
 import os
 from unittest import TestCase
 from vcs_ssh import parse_args
@@ -55,4 +72,5 @@ class VcsSshArgsParserTestCase(TestCase):
         self.assertEqual(args['rw_dirs'], self._mk_rw_proof())
         self.assertEqual(args['ro_dirs'], [])
 
-# vim:
+
+# vim: syntax=python:sws=4:sw=4:et:
