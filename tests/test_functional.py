@@ -26,7 +26,7 @@ import warnings
 import re
 import sys
 
-from ssh_harness import PubKeyAuthSshClientTestCase
+from ssh_harness import PubKeyAuthSshClientTestCase, BackupEditAndRestore
 
 
 MODULE_PATH = os.path.abspath(os.path.dirname(__file__))
