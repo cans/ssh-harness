@@ -437,10 +437,7 @@ UsePAM yes
 '''
 
     @classmethod
-    def _skip(cls, exc=None):
-        if exc is not None:
-            cls._errors['_skip(exc={})'.format(exc)] = \
-                traceback.format_exc()
+    def _skip(cls):
 
         # Be civil, clean-up anyways.
         cls.tearDownClass()
@@ -465,19 +462,29 @@ UsePAM yes
             return 'rsa'
 
     @classmethod
-    def _check_auxilary_program(cls, path):
+    def _exc2error(exc):
+        if exc is not None:
+            cls._errors['_skip(exc={})'.format(exc)] = \
+                traceback.format_exc()
+
+    @classmethod
+    def _check_auxiliary_program(cls, path, error=True):
         if not os.path.isfile(path):
-            cls._errors['_check_auxilary_program({})'.format(path)] = \
-                'Program not found.'
-            cls._skip()
+            if error:
+                cls._errors['_check_auxiliary_program({})'.format(path)] = \
+                    'Program not found.'
+            return False
 
         res = os.stat(path)
         if cls._BIN_MASK != (res.st_mode & cls._BIN_MASK):
-            cls._errors['_check_auxilary_program({})'.format(path)] =      \
-                "Program `{}' is not executable, its mode is {}, expected" \
-                " {}".format(cls._mode2string(stat.S_IMODE(res.st_mode)),
-                             cls._mode2string(stat.S_IMODE(cls._BIN_MASK)))
-            cls._skip()
+            if error:
+                cls._errors['_check_auxilary_program({})'.format(path)] =     \
+                    "Program `{}' is not executable, its mode is {},"         \
+                    " expected {}".format(
+                        cls._mode2string(stat.S_IMODE(res.st_mode)),
+                        cls._mode2string(stat.S_IMODE(cls._BIN_MASK)))
+            return False
+        return True
 
     @classmethod
     def _check_dir(cls, path, mode):
@@ -485,18 +492,23 @@ UsePAM yes
             try:
                 os.makedirs(path, mode)
             except Exception as e:
-                cls._skip(exc=e)
-        else:
-            # Do we have the required permission
-            res = os.stat(path)
-            if mode != (res.st_mode & mode):
-                cls._errors['_check_dir({}, {})'.format(path, mode)] = \
-                    "Unsufficient permissions on directory `{}': need" \
-                    " {} but got {}.".format(
-                        path,
-                        cls._mode2string(mode),
-                        cls._mode2string(stat.S_IMODE(res.st_mode)))
-                cls._skip()
+                cls._exc2error(exc=e)
+                return False
+
+        # Ok we got the directory, but since the mask passed to chmod is
+        # umask-ed we may not have the right permissions. So we must check
+        # them anyway.
+
+        # Do we have the required permission
+        res = os.stat(path)
+        if mode != (res.st_mode & mode):
+            cls._errors['_check_dir({}, {})'.format(path, mode)] = \
+                "Unsufficient permissions on directory `{}': need" \
+                " {} but got {}.".format(
+                    path,
+                    cls._mode2string(mode),
+                    cls._mode2string(stat.S_IMODE(res.st_mode)))
+            return False
         return True
 
     @classmethod
@@ -706,13 +718,20 @@ Host {ssh_config_host_name}
         If it is not possible to have these preconditions met, all the test
         cases defined by the class are skipped."""
         res = pwd.getpwuid(os.getuid())
-        cls._check_dir(res.pw_dir, stat.S_IRWXU)
-        cls._check_dir(os.path.dirname(cls._SSH_CONFIG_PATH), stat.S_IRWXU)
-        cls._check_dir(os.getcwd(), stat.S_IRWXU)
-        cls._check_dir(cls.FIXTURE_PATH, stat.S_IRWXU)
-        cls._check_auxilary_program(cls.SSHD_BIN)
-        cls._check_auxilary_program(cls.SSH_KEYSCAN_BIN)
-        cls._check_auxilary_program(cls.SSH_KEYGEN_BIN)
+        # Always use:
+        #     pc_met = <condition> and pc_met
+        # That way we preserve the truth value of pc_met and we can report as
+        # many problems as we can at once.
+        pc_met = cls._check_dir(res.pw_dir, stat.S_IRWXU)
+        pc_met = cls._check_dir(os.path.dirname(cls._SSH_CONFIG_PATH),
+                                stat.S_IRWXU) and pc_met
+        pc_met = cls._check_dir(os.getcwd(), stat.S_IRWXU) and pc_met
+        pc_met = cls._check_dir(cls.FIXTURE_PATH, stat.S_IRWXU) and pc_met
+        pc_met = cls._check_auxiliary_program(cls.SSHD_BIN) and pc_met
+        pc_met = cls._check_auxiliary_program(cls.SSH_KEYSCAN_BIN) and pc_met
+        pc_met = cls._check_auxiliary_program(cls.SSH_KEYGEN_BIN) and pc_met
+        if not pc_met:
+           cls._skip()
 
     @classmethod
     def setUpClass(cls):
@@ -722,7 +741,7 @@ Host {ssh_config_host_name}
         required step.
         """
         args = cls._gather_config()
-        cls._preconditions()
+        cls._preconditions()  # May raise skip
         cls._generate_sshd_config(args)
         cls._protect_private_keys()
         cls._generate_keys()
