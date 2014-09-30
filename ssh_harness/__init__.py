@@ -500,6 +500,12 @@ UsePAM yes
         return True
 
     @classmethod
+    def _add_file_to_restore(cls, file):
+        """Add a file to the list of those to be restore at the end of the
+        tests."""
+        cls._NEED_TO_BE_RESTORED.append(file)
+
+    @classmethod
     def _delete_file(cls, file):
         if os.path.isfile(file) is True:
             os.unlink(file)
