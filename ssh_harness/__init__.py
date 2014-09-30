@@ -16,10 +16,40 @@ import pwd
 
 
 class BackupEditAndRestore(file):
+    """Open a file for edition but creates a backup copy first.
+
+    :param str path: the path to the target file.
+    :param str suffix: the suffix to append the name of the file to create
+        its backup copy (default is 'backup').
+    :param str mode: the mode in which open the file (see :py:func:`open`)
+
+    All keyword arguments accepted by the :py:func:`open` function are
+    accepted.
+
+    This context manager tryes to make the changes to the file appear atomic.
+    To that end as well as creating a backup copy, it create an *edition* copy
+    of the target file.
+    When entering the context the file being modified is in fact not the target
+    file but its *edition-copy*
+    When the contex is exited the *edition-file* replaces the target file
+    (atomically if the OS platform supports it, i.e. atomicity is guaranteed
+    on POSIX system).
+
+    You need to keep a reference to the context manager up to the time
+    you want to restore the file, which is achieve by calling its
+    :py:meth:`restore` method.
+
+    .. note::
+
+       The mode 'r' is prohibited here are it makes no sense to backup
+       a file to do nothing with it.
+    """
 
     _SUFFIX = 'backup'
 
     def _move(self, src, dst):
+        """Wrapper around :py:func:`os.rename` that handles some issues on
+        platform which do not have an atomic rename."""
         try:
             os.rename(src, dst)
         except OSError as e:
@@ -32,22 +62,7 @@ class BackupEditAndRestore(file):
         os
 
     def __init__(self, path, mode='a', suffix=None, **kwargs):
-        """Open a file for edition but creates a backup copy first.
-
-        :param str suffix: the suffix to append the name of the file to create
-            its backup copy (default is 'backup').
-
-        .. note::
-
-           As this is meant to edit existing file, the 'x' mode makes no
-           sense here and is prohibited. Modes that don't authorize
-           modifying the file are prohibited as well.
-        """
         check_mode = (mode * 1).replace('U', 'r').replace('rr', 'r')
-        if 'x' in check_mode:
-            raise ValueError(
-                "Use of 'x' in mode is non-sensical: why ask to backup a file "
-                "you don't want to exist in the first place ?")
         if 'r' == check_mode[0] and '+' not in check_mode:
             raise ValueError('Wrong file opening mode: {}'.format(mode))
         self._path = path
@@ -56,6 +71,9 @@ class BackupEditAndRestore(file):
 
         self._new_path = '{}.{}'.format(self._path, self._new_suffix)
         self._backup_path = '{}.{}'.format(self._path, self._suffix)
+
+        # Some flags used to know where we're at.
+        self._entered = False
         self._have_backup = None
         self._restored = False
 
@@ -70,21 +88,32 @@ class BackupEditAndRestore(file):
         super(BackupEditAndRestore, self).__init__(self._new_path, **kwargs)
 
     def __enter__(self):
+        if self._entered is True:
+            raise RuntimeError(
+                "You cannot re-use a {} context manager (recursivelly or "
+                "otherwise)".format(self.__class__.__name__))
+
+        self._entered = True
         self._have_backup = False
+
         if os.path.isfile(self._path):
             shutil.copy(self._path, self._backup_path)
             self._have_backup = True
         return self
 
     def __exit__(self, *args):
-         # Closes self._new_path (required before moving it)
+        # Closes self._new_path (required before moving it)
         res = super(BackupEditAndRestore, self).__exit__(*args)
 
-        # Put the original file 
+        # Replace the original file with the one that has been edited.
         self._move(self._new_path, self._path)
         return res
 
     def restore(self):
+        """Restores the file as it were before:
+
+        If it did not exist then it is removed, otherwise its back-up
+        copy is used to restore it in its previous state."""
         if self._restored is True:
             # TODO raise an exception.
             return
@@ -216,7 +245,7 @@ class BaseSshClientTestCase(TestCase):
          failures happening here are prone to messing things up. Work is needed
          to make this far more bullet proof.
 
-       - Having OpenSSH daemonizing itself, makes reliably monitor that is does
+       - Having OpenSSH daemonizing itself makes reliably monitor that is does
          not crash, fails to start, and such quite difficult...
          Assuming it is a quite proven soft, we could monitor its pidfile
          with something like iNotify...
@@ -233,11 +262,7 @@ class BaseSshClientTestCase(TestCase):
 
        - Provide means set autorized key options on a per-test basis.
 
-       - What about the SFTP subsystem ? (Should be disable by default)
-
-       - Append some random ascii bytes to the SSH_CONFIG_{OPEN,CLOSE}_TAG
-         values so that tests can be nested or ran concurrently (there surely
-         is more to do to achieve that but it is still one required bit).
+       - What about the SFTP subsystem ? (Should be disabled by default)
     """
 
     try:
@@ -292,6 +317,8 @@ class BaseSshClientTestCase(TestCase):
     restored.
     """
 
+    _NEED_TO_BE_RESTORED = []
+
     _KEY_FILES_MODE = 0x00000000 | stat.S_IRUSR
     """Access mode that is set on files containing private keys."""
 
@@ -313,8 +340,6 @@ class BaseSshClientTestCase(TestCase):
     _KNOWN_HOSTS_PATH = os.path.expanduser('~/.ssh/known_hosts')
     _SSH_ENVIRONMENT_PATH = os.path.expanduser('~/.ssh/environment')
     _SSH_CONFIG_PATH = os.path.expanduser('~/.ssh/config')
-    _SSH_CONFIG_OPEN_TAG = '# BEGIN TEST-HARNES CONFIG'
-    _SSH_CONFIG_CLOSE_TAG = '# END TEST-HARNES CONFIG'
     _SSHD_CONFIG = '''# ssh_harness generated configuration file
 Port {port}
 ListenAddress {address}
@@ -371,7 +396,7 @@ TCPKeepAlive yes
 Banner none
 AcceptEnv LANG LC_*
 
-Subsystem sftp /usr/lib/openssh/sftp-server
+# Subsystem sftp /usr/lib/openssh/sftp-server
 
 UsePAM yes
 '''
@@ -468,37 +493,11 @@ UsePAM yes
     def _generate_environment_file(cls):
         if cls.SSH_ENVIRONMENT_FILE is False:
             return
-        new_path, backup_path = cls._get_path(path)
-
-        with BackupAndEdit(new_path, 'w+') as f:
+        with BackupEditAndRestore(self.SSH_ENVIRONMENT_PATH, 'w+') as f:
             for k, v in cls.SSH_ENVIRONMENT.items():
                 print("{}={}".format(k, v), file=f)
 
-            cls._to_resore.append(f)
-
-    @classmethod
-    def _backup_file(cls, filename):
-        have_attr = '_HAVE_{}'.format(filename)
-        path_attr = '_{}_PATH'.format(filename)
-        path = getattr(cls, path_attr, None)
-        if path is None:
-            cls._errors['restore_file({})'.format(filename)] = \
-                'Cannot restore file which path attribute is not set: {}' \
-                .format(attr)
-            cls._skip()
-        new_path, backup_path = cls._get_paths(path)
-
-        if os.path.isfile(path):
-            shutil.copy(regular_path, backup_path)
-        os.mv(new_path, regular_path)
-
-
-    @classmethod
-    def _restore_environment_file(cls):
-        with open(new_path) as f:
-            for k, v in cls.SSH_ENVIRONMENT.items():
-                print("{}={}".format(k, v), file=f)
-        cls._restore_file('SSH_ENVIRONMENT')
+        cls._NEED_TO_BE_RESTORED.append(f)
 
     @classmethod
     def _generate_authzd_keys_file(cls):
@@ -566,55 +565,24 @@ UsePAM yes
 
     @classmethod
     def _update_ssh_config(cls, args):
-        cls._HAVE_SSH_CONFIG = False
         if cls.UPDATE_SSH_CONFIG is False:
             return
-        # cls._check_dir(cls._SSH_CONFIG_PATH, stat.S_IRWXU)
-        with open(cls._SSH_CONFIG_PATH, 'a') as user_config:
-            cls._HAVE_SSH_CONFIG = True
-            user_config.write('''{ssh_config_open_tag}
+
+        with BackupEditAndRestore(cls._SSH_CONFIG_PATH, 'a') as user_config:
+            user_config.write('''
 Host {ssh_config_host_name}
         HostName {address}
         Port {port}
         IdentityFile {identity}
-{ssh_config_close_tag}
 '''.format(**args))
-
-    @classmethod
-    def _restore_ssh_config(cls):
-
-        restored_path = '{}.cleaned'.format(cls._SSH_CONFIG_PATH)
-        with open(restored_path, 'w+') as restored:
-            skip = False
-            with open(cls._SSH_CONFIG_PATH, 'r') as modified:
-                for line in modified:
-                    stripped_line = line.strip()
-                    if cls._SSH_CONFIG_OPEN_TAG == stripped_line:
-                        skip = True
-
-                    if skip is False:
-                        restored.write(line)
-
-                    if cls._SSH_CONFIG_CLOSE_TAG == stripped_line:
-                        skip = False
+        cls._NEED_TO_BE_RESTORED.append(user_config)
 
     @classmethod
     def _update_user_known_hosts(cls):
-        """Updates the user's `~/.ssh/known_hosts' file to prevent to be
+        """Updates the user's `~/.ssh/known_hosts' file to prevent being
         prompted to validate the server's host key.
-
-        The original file is backed-up so it can be restored upon tests
-        completion.
         """
-
-        # Back-up the previous file, if it exists, for later restoration.
-        if os.path.isfile(cls._KNOWN_HOSTS_PATH):
-            cls._HAVE_KNOWN_HOSTS = True
-            shutil.copyfile(cls._KNOWN_HOSTS_PATH,
-                            '{}.back'.format(cls._KNOWN_HOSTS_PATH))
-
-        # Use ssh-keyscan to pull the servers keys and add them to the file.
-        with open(cls._KNOWN_HOSTS_PATH, 'a') as known_hosts:
+        with BackupEditAndRestore(cls._KNOWN_HOSTS_PATH, 'a') as known_hosts:
             keyscanner = subprocess.Popen([
                 'ssh-keyscan', '-H4', '-p', str(cls.PORT),
                 cls.BIND_ADDRESS, ],
@@ -624,9 +592,8 @@ Host {ssh_config_host_name}
 
             # We check the length of `out` because in case of connection
             # failure, ssh-keyscan still exit with 0, but spits nothing.
-            if (0 != keyscanner.returncode
-                or 0 == len(out)):
-                cls._errors['_update_user_know_hosts'] = ( 
+            if 0 != keyscanner.returncode or 0 == len(out):
+                cls._errors['_update_user_know_hosts'] = (
                     'ssh-keyscan failed with status {}: {}\nOutput: {}'
                     .format(keyscanner.returncode,
                             errout.decode('utf-8'),
@@ -634,46 +601,24 @@ Host {ssh_config_host_name}
             else:
                 # Seems we got what we need, save it.
                 known_hosts.write(out)
-
-    @classmethod
-    def _restore_file(cls, filename):
-        attr = '_{}_PATH'.format(filename)
-        path = getattr(cls, '_{}_PATH'.format(filename), None)
-        if path is None:
-            cls._errors['restore_file({})'.format(filename)] = \
-                'Cannot restore file which path attribute is not set: {}' \
-                .format(attr)
-
-        have_path = getattr(cls, '_HAVE_{}'.format(filename), False)
-        if have_path is None:
-            return  # We never delt with this file during setup so we skip it.
-
-        if have_path is True:
-            # Restore backed-up ~/.ssh/known_hosts file.
-            backup = '{}.back'.format(path)
-            if os.path.isfile(backup):
-                shutil.move(backup, path)
-        else:
-            # Or remove it if the file did not exists before.
-            if os.path.isfile(path):
-                os.unlink(path)
-            # Ignore uncreated file might be because of a previous error.
-
-    @classmethod
-    def _restore_user_known_hosts(cls):
-        cls._restore_file('KNOWN_HOSTS')
-
-    @classmethod
-    def _restore_ssh_config(cls):
-        cls._restore_file('SSH_CONFIG')
+        cls._NEED_TO_BE_RESTORED.append(known_hosts)
 
     @classmethod
     def _mode2string(cls, mode):
+        """Converts a integer into a string containing its value encoded
+        in octal."""
         # Python 3 octal notation is 0o<digit> WTF !!
         return oct(mode).replace('o', '')
 
     @classmethod
     def _protect_private_keys(cls):
+        """Changes the modes of the directories along the patht to the
+        directory that contains the server and user private keys.
+        Any directory not belonging to the keys owner must belong to root
+        and not be group nor other-writable (to prevent hijacking the users
+        private-key by replacing one of its parent directory by another one
+        containing offensive keys).
+        """
         path = cls.FIXTURE_PATH
         while '/' != path:
             res = os.stat(path)
@@ -690,6 +635,9 @@ Host {ssh_config_host_name}
 
     @classmethod
     def _restore_modes(cls):
+        """Restores the directories which mode we changed to protect the
+        private keys to their previous modes.
+        (see ::``)"""
         for directory, mode in cls._NEED_CHMOD:
             subprocess.call([
                 'sudo', 'chmod', cls._mode2string(mode), directory,
@@ -697,6 +645,11 @@ Host {ssh_config_host_name}
 
     @classmethod
     def _preconditions(cls):
+        """Checks that some files or directory that commonly are missing or
+        do not have the appropriate permssions are indeed present.
+
+        If it is not possible to have these preconditions met, all the test
+        cases defined by the class are skipped."""
         res = pwd.getpwuid(os.getuid())
         cls._check_dir(res.pw_dir, stat.S_IRWXU)
         cls._check_dir(os.path.dirname(cls._SSH_CONFIG_PATH), stat.S_IRWXU)
@@ -705,6 +658,11 @@ Host {ssh_config_host_name}
 
     @classmethod
     def setUpClass(cls):
+        """Sets up the environment to start-up an SSH daemon and access it.
+
+        This functions keep thing at a high level calling a method for each
+        required step.
+        """
         args = cls._gather_config()
         cls._preconditions()
         cls._generate_sshd_config(args)
@@ -725,8 +683,6 @@ Host {ssh_config_host_name}
 
     @classmethod
     def tearDownClass(cls):
-        cls._restore_user_known_hosts()
-
         # If the server was started.
         if hasattr(cls, 'SSHD_PIDFILE_PATH'):
             try:
@@ -751,12 +707,16 @@ Host {ssh_config_host_name}
                 file = '{}.pub'.format(getattr(cls, '{}_PATH'.format(f)))
                 cls._delete_file(file)
 
+        import pdb
+        pdb.set_trace()
+
+        for backup in cls._NEED_TO_BE_RESTORED:
+            print('Restoring: {}'.format(backup.name))
+            backup.restore()
+
         # Now that we destroyed all keys we can restore the modes of the
         # directories that were along their path.
         cls._restore_modes()
-
-        if cls.UPDATE_SSH_CONFIG is True:
-            cls._restore_ssh_config()
 
 
 class PubKeyAuthSshClientTestCase(BaseSshClientTestCase):
