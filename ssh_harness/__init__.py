@@ -13,9 +13,20 @@ import subprocess
 import sys
 import traceback
 import pwd
+import io
+from locale import getpreferredencoding
 
 
-class BackupEditAndRestore(file):
+__ALL__ = [
+    'BackupEditAndRestore',
+    'PubKeyAuthSshClientTestCase',
+    'PasswdAuthSshClientTestCase',
+    ]
+
+_ENCODING = getpreferredencoding(do_setlocale=False)
+
+
+class BackupEditAndRestore(object):
     """Open a file for edition but creates a backup copy first.
 
     :param str path: the path to the target file.
@@ -59,7 +70,6 @@ class BackupEditAndRestore(file):
                 os.rename(src, dst)
             except OSError:
                 pass
-        os
 
     def __init__(self, path, mode='a', suffix=None, **kwargs):
         check_mode = (mode * 1).replace('U', 'r').replace('rr', 'r')
@@ -83,27 +93,36 @@ class BackupEditAndRestore(file):
             if os.path.isfile(self._path):
                 shutil.copy(self._path, self._new_path)
 
-        kwargs.update({'mode': mode})  # Default mode is 'r'
+        kwargs.update({'mode': mode})  # Default mode is 'a'
         # Output is redirected to the new file
-        super(BackupEditAndRestore, self).__init__(self._new_path, **kwargs)
+        self._f = open(self._new_path, **kwargs)
+        # super(BackupEditAndRestore, self).__init__(self._new_path, **kwargs)
 
     def __enter__(self):
         if self._entered is True:
             raise RuntimeError(
                 "You cannot re-use a {} context manager (recursivelly or "
                 "otherwise)".format(self.__class__.__name__))
-
         self._entered = True
         self._have_backup = False
+        self._f.__enter__()
+        # super(BackupEditAndRestore, self).__enter__()
 
         if os.path.isfile(self._path):
             shutil.copy(self._path, self._backup_path)
             self._have_backup = True
         return self
 
+    def __getattr__(self, name):
+        try:
+            return object.__getattribute__(self, name)
+        except AttributeError:
+            return object.__getattribute__(self._f, name)
+
     def __exit__(self, *args):
         # Closes self._new_path (required before moving it)
-        res = super(BackupEditAndRestore, self).__exit__(*args)
+        res = self._f.__exit__(*args)
+        # res = super(BackupEditAndRestore, self).__exit__(*args)
 
         # Replace the original file with the one that has been edited.
         self._move(self._new_path, self._path)
@@ -305,6 +324,8 @@ class BaseSshClientTestCase(TestCase):
         }
     _MODE_MASK = (stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP
                   | stat.S_IROTH | stat.S_IXOTH | stat.S_ISVTX)
+    _BIN_MASK = (stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP
+                 | stat.S_IROTH | stat.S_IXOTH)
     """Mode mask to check the mode of the parent directories of the one
     the contains the key. The most permission the can have is this:
     rwxr-xr-x (0755) other wise some other than the owner of the key may
@@ -430,6 +451,21 @@ UsePAM yes
             return 'rsa'
 
     @classmethod
+    def _check_auxilary_program(cls, path):
+        if not os.path.isfile(path):
+            cls._errors['_check_auxilary_program({})'.format(path)] = \
+                'Program not found.'
+            cls._skip()
+
+        res = os.stat(path)
+        if cls._BIN_MASK != (res.st_mode & cls._BIN_MASK):
+            cls._errors['_check_auxilary_program({})'.format(path)] =      \
+                "Program `{}' is not executable, its mode is {}, expected" \
+                " {}".format(cls._mode2string(stat.S_IMODE(res.st_mode)),
+                             cls._mode2string(stat.S_IMODE(cls._BIN_MASK)))
+            cls._skip()
+
+    @classmethod
     def _check_dir(cls, path, mode):
         if not os.path.isdir(path):
             try:
@@ -493,7 +529,7 @@ UsePAM yes
     def _generate_environment_file(cls):
         if cls.SSH_ENVIRONMENT_FILE is False:
             return
-        with BackupEditAndRestore(self.SSH_ENVIRONMENT_PATH, 'w+') as f:
+        with BackupEditAndRestore(self.SSH_ENVIRONMENT_PATH, 'w+t') as f:
             for k, v in cls.SSH_ENVIRONMENT.items():
                 print("{}={}".format(k, v), file=f)
 
@@ -502,7 +538,7 @@ UsePAM yes
     @classmethod
     def _generate_authzd_keys_file(cls):
         # Generate the authorized_key file with the newly created key in it.
-        with open(cls.AUTHORIZED_KEYS_PATH, 'w') as authzd_file:
+        with open(cls.AUTHORIZED_KEYS_PATH, 'wt') as authzd_file:
             with open('{}.pub'.format(cls.USER_RSA_KEY_PATH), 'r') as user_key:
                 key = user_key.read()
             if cls.SSH_ENVIRONMENT and cls.SSH_ENVIRONMENT_FILE is False:
@@ -519,7 +555,7 @@ UsePAM yes
 
     @classmethod
     def _generate_sshd_config(cls, args):
-        with open(cls.SSHD_CONFIG_PATH, 'w') as f:
+        with open(cls.SSHD_CONFIG_PATH, 'wt') as f:
             f.write(cls._SSHD_CONFIG.format(**args))
 
     @classmethod
@@ -543,8 +579,6 @@ UsePAM yes
         # file.
         args.update({'ssh_config_host_name': cls.SSH_CONFIG_HOST_NAME,
                      'identity': cls.USER_RSA_KEY_PATH,
-                     'ssh_config_open_tag': cls._SSH_CONFIG_OPEN_TAG,
-                     'ssh_config_close_tag': cls._SSH_CONFIG_CLOSE_TAG,
                      })
 
         # En- or disables PublicKey and Password authentication methods.
@@ -596,11 +630,12 @@ Host {ssh_config_host_name}
                 cls._errors['_update_user_know_hosts'] = (
                     'ssh-keyscan failed with status {}: {}\nOutput: {}'
                     .format(keyscanner.returncode,
-                            errout.decode('utf-8'),
-                            out.decode('utf-8')))
+                            errout.decode(known_hosts.encoding),
+                            out.decode(known_hosts.encoding or _ENCODING)))
             else:
                 # Seems we got what we need, save it.
-                known_hosts.write(out)
+                known_hosts.write(
+                    out.decode(known_hosts.encoding or _ENCODING))
         cls._NEED_TO_BE_RESTORED.append(known_hosts)
 
     @classmethod
@@ -655,6 +690,9 @@ Host {ssh_config_host_name}
         cls._check_dir(os.path.dirname(cls._SSH_CONFIG_PATH), stat.S_IRWXU)
         cls._check_dir(os.getcwd(), stat.S_IRWXU)
         cls._check_dir(cls.FIXTURE_PATH, stat.S_IRWXU)
+        cls._check_auxilary_program(cls.SSHD_BIN)
+        cls._check_auxilary_program(cls.SSH_KEYSCAN_BIN)
+        cls._check_auxilary_program(cls.SSH_KEYGEN_BIN)
 
     @classmethod
     def setUpClass(cls):
@@ -706,9 +744,6 @@ Host {ssh_config_host_name}
                 # private ones.
                 file = '{}.pub'.format(getattr(cls, '{}_PATH'.format(f)))
                 cls._delete_file(file)
-
-        import pdb
-        pdb.set_trace()
 
         for backup in cls._NEED_TO_BE_RESTORED:
             print('Restoring: {}'.format(backup.name))

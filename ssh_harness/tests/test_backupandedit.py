@@ -3,11 +3,15 @@
 # Copyright © 2014, Nicolas CANIART <nicolas@caniart.net>
 #
 from __future__ import print_function
-from unittest import TestCase, SkipTest
+from unittest import TestCase, SkipTest, skipIf
 import stat
 import os
+from sys import version_info as VERSION_INFO
 
 from ssh_harness import BackupEditAndRestore
+
+_Py3 = (3, ) <= VERSION_INFO
+_Py34 = (3, 4) <= VERSION_INFO
 
 
 class BackupEditAndRestoreTestCase(TestCase):
@@ -243,7 +247,7 @@ class BackupEditAndRestoreTestCase(TestCase):
                 self.assertEqual(chk.read(), self._file_content)
 
     def test_file_is_copied_when_mode_is_rp(self):
-        with BackupEditAndRestore(self._existing_path, 'r+',
+        with BackupEditAndRestore(self._existing_path, 'r+t',
                                   suffix=self._suffix) as f:
             # Is the original file still present
             self.assertTrue(os.path.isfile(self._existing_path))
@@ -256,7 +260,7 @@ class BackupEditAndRestoreTestCase(TestCase):
             self.assertEqual(f.read(), self._file_content)
 
     def test_edition_file_is_properly_removed_at_exit_with_mode_rp(self):
-        with BackupEditAndRestore(self._existing_path, 'r+',
+        with BackupEditAndRestore(self._existing_path, 'r+t',
                                   suffix=self._suffix) as f:
             pass
         # check that the backup file still does not exist
@@ -278,7 +282,7 @@ class BackupEditAndRestoreTestCase(TestCase):
         self.assertTrue(os.path.isfile(self._existing_path))
 
     def test_file_modified_when_mode_is_rp(self):
-        with BackupEditAndRestore(self._existing_path, 'r+',
+        with BackupEditAndRestore(self._existing_path, 'r+t',
                                   suffix=self._suffix) as f:
             f.write('.')
 
@@ -305,7 +309,7 @@ class BackupEditAndRestoreTestCase(TestCase):
                              '.'.format(self._file_content[1:]))
 
     def test_file_restored_when_mode_is_rp(self):
-        with BackupEditAndRestore(self._existing_path, 'r+',
+        with BackupEditAndRestore(self._existing_path, 'r+t',
                                   suffix=self._suffix) as f:
             pass
 
@@ -322,7 +326,7 @@ class BackupEditAndRestoreTestCase(TestCase):
             self.assertEqual(chk.read(), self._file_content)
 
     def test_file_restored_when_mode_is_a(self):
-        with BackupEditAndRestore(self._existing_path, 'r+',
+        with BackupEditAndRestore(self._existing_path, 'r+t',
                                   suffix=self._suffix) as f:
             pass
 
@@ -339,7 +343,7 @@ class BackupEditAndRestoreTestCase(TestCase):
             self.assertEqual(chk.read(), self._file_content)
 
     def test_file_restored_when_mode_is_w(self):
-        with BackupEditAndRestore(self._existing_path, 'r+',
+        with BackupEditAndRestore(self._existing_path, 'r+t',
                                   suffix=self._suffix) as f:
             pass
 
@@ -353,7 +357,8 @@ class BackupEditAndRestoreTestCase(TestCase):
         self.assertTrue(os.path.isfile(self._existing_path))
 
         with open(self._existing_path, 'r') as chk:
-            self.assertEqual(chk.read(), self._file_content)
+            self.assertEqual(chk.read(),
+                             self._file_content)
 
     def test_inexistant_file_fails_when_mode_is_r(self):
         with self.assertRaises(ValueError):
@@ -377,6 +382,7 @@ class BackupEditAndRestoreTestCase(TestCase):
         self.assertFalse(os.path.isfile(self._inexistant_backup_path))
         self.assertFalse(os.path.isfile(self._inexistant_path))
 
+    @skipIf(_Py34, "From 3.4 on, Python no longer supports U mode")
     def test_inexistant_file_fails_when_mode_is_U(self):
         with self.assertRaises(ValueError):
             with BackupEditAndRestore(self._inexistant_path, 'U',
@@ -388,6 +394,7 @@ class BackupEditAndRestoreTestCase(TestCase):
         self.assertFalse(os.path.isfile(self._inexistant_backup_path))
         self.assertFalse(os.path.isfile(self._inexistant_path))
 
+    @skipIf(_Py34, "From 3.4, on Python no longer supports the U mode")
     def test_inexistant_file_fails_when_mode_is_Up(self):
         with self.assertRaises(IOError):
             with BackupEditAndRestore(self._inexistant_path, 'U+',
