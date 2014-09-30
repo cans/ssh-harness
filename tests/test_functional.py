@@ -215,13 +215,49 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         #         ])),
         }
 
+    VCS = {
+        'HG': ('/usr/bin/hg', ),
+        'GIT': ('/usr/bin/git', ),
+        'SVN': ('/usr/bin/svn', '/usr/bin/svnadmin', ),
+        'BZR': ('/usr/bin/bzr', ),
+        }
+
+    @classmethod
+    def _get_program_version(cls):
+        rex = re.compile('(?:.*version )(?P<version>(:?\d+\.?)+)(?:.*)'
+                         .encode('utf-8'))
+        for vcs, v in cls.VCS.items():
+            attr = '{}_VERSION'.format(vcs)
+            if getattr(cls, 'HAVE_{}'.format(vcs), False):
+                out = subprocess.check_output([v[0], '--version'])
+                out = out.splitlines()[0]
+                match = rex.search(out)
+                if match is not None:
+                    setattr(cls, attr,
+                            tuple(match.groupdict()['version'].split('.')))
+                else:
+                    # bazaar
+                    out.split()[-1]
+                    setattr(cls, attr, None)
+
     @classmethod
     def setUpClass(cls):
         # We want all programs output to be in 'C' locale (makes output
         # independant of the user's environment)
-        os.putenv('LANG', 'C')
+        os.putenv('LANG', 'C')  # TODO: not reset on tests completion
         read_only_repos = []
         read_write_repos = []
+
+        # Some preconditions:
+        # cls.HAVE_BZR = cls._check_auxiliary_program('/usr/bin/bzr',
+        #                                             error=False)
+        cls.HAVE_HG = cls._check_auxiliary_program('/usr/bin/hg', error=False)
+        cls.HAVE_GIT = cls._check_auxiliary_program('/usr/bin/git',
+                                                    error=False)
+        cls.HAVE_SVN = cls._check_auxiliary_program('/usr/bin/svn',
+                                                    error=False)
+        cls.HAVE_SVNADMIN = cls._check_auxiliary_program('/usr/bin/svnadmin',
+                                                         error=False)
 
         # Use this to keep track of commits.
         cls._COMMIT = 0
@@ -264,12 +300,12 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                 warning.warn(UserWarning, "...")
                 pass
 
-            if name.endswith('_git'):
+            if name.endswith('_git') and cls.HAVE_GIT:
                 cmd = ['git', 'init', '--bare', '-q',
                        getattr(cls, path_attr), ]
-            elif name.endswith('_hg'):
+            elif name.endswith('_hg') and cls.HAVE_HG:
                 cmd = ['hg', 'init', getattr(cls, path_attr), ]
-            elif name.endswith('_svn'):
+            elif name.endswith('_svn') and cls.HAVE_SVNADMIN and cls.HAVE_SVN:
                 cmd = ['svnadmin', 'create', '--fs-type', 'fsfs',
                        getattr(cls, path_attr), ]
             else:
@@ -303,6 +339,13 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         default = simple
 ''')
         cls._add_file_to_restore(gitconfig)
+
+        with BackupEditAndRestore(os.path.expanduser('~/.hgrc'), 'a') as hgrc:
+           hgrc.write('''
+[ui]
+username = Test User <test@example.com>
+''')
+        cls._get_program_version()
         super(VcsSshIntegrationTestCase, cls).setUpClass()
 
     @classmethod
@@ -490,6 +533,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
     # -- Git related tests ----------------------------------------------------
 
     def test_git_clone_from_read_only_repo(self):
+        if not self.HAVE_GIT:
+            self.skipTest('Git is not available')
         cmd = ['git', 'clone', self._RO_GIT_URL, ]
 
         client = subprocess.Popen(
@@ -502,6 +547,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         self.assertEqual(client.returncode, 0)
 
     def test_git_clone_from_read_write_repo(self):
+        if not self.HAVE_GIT:
+            self.skipTest('Git is not available')
         cmd = [
             'git',
             'clone',
@@ -517,6 +564,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         self.assertEqual(client.returncode, 0)
 
     def test_git_pull_from_read_only_repo(self):
+        if not self.HAVE_GIT:
+            self.skipTest('Git is not available')
         # First we clone the repo as it is.
         self._clone(self._RO_GIT_URL)
         cmd = [
@@ -546,17 +595,24 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             maybe_bytes(
                 err,
                 'From {}\n'
-                '   [0-9a-f]{{7}}\.\.[0-9a-f]{{7}}  master     -> origin/master\n'
+                '( \* \[new branch\]|'
+                '   [0-9a-f]{{7}}\.\.[0-9a-f]{{7}}) +'
+                'master     -> origin/master\n'
                 .format(self._RO_GIT_URL[:-4])))
-        self.assertRegexpMatches(
-            out,
-            re.compile(
-                maybe_bytes(out,
-                            'Updating [0-f]{7}\.\.[0-f]{7}\n'
-                            'Fast-forward\n.*'),
-                re.S))
+        if self.GIT_VERSION < (2, 0, 0):
+            self.assertEqual(out, ''.encode('utf-8'))
+        else:
+            self.assertRegexpMatches(
+                out,
+                re.compile(
+                    maybe_bytes(out,
+                                'Updating [0-f]{7}\.\.[0-f]{7}\n'
+                                'Fast-forward\n.*'),
+                    re.S))
 
     def test_git_pull_from_read_write_repo(self):
+        if not self.HAVE_GIT:
+            self.skipTest('Git is not available')
         # First we clone the repo as it is.
         self._clone(self._RW_GIT_URL)
 
@@ -586,8 +642,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             re.compile(
                 maybe_bytes(
                     err,
-                    'From {}\n'
-                    '   [0-9a-f]{{7}}\.\.[0-9a-f]{{7}}  master     -> origin/master'
+                    'From {}\n( \* \[new branch\]|   [0-9a-f]{{7}}\.\.'
+                    '[0-9a-f]{{7}}) +master     -> origin/master'
                     .format(self._RW_GIT_URL[:-4])),
                 re.S))
         self.assertRegexpMatches(
@@ -624,11 +680,12 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
 
         self.assertRegexpMatches(
             err,
-            maybe_bytes(err,
-                        'To {}\n   [0-f]{{7}}\.\.[0-f]{{7}}  '
+            maybe_bytes(err, 'To {}\n   [0-f]{{7}}\.\.[0-f]{{7}}  '
                         'master -> master\n.*'.format(self._RW_GIT_URL)))
 
     def test_git_push_to_read_only_repo(self):
+        if not self.HAVE_GIT:
+            self.skipTest('Git is not available')
         # Have to make a remote clone or the push would be local (slow i know).
         self._make_a_revision(self._RO_GIT_URL)
 
@@ -658,6 +715,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
     # -- Mercurial related tests ----------------------------------------------
 
     def test_hg_clone_from_ro_repository(self):
+        if not self.HAVE_HG:
+            self.skipTest('Mercurial is not available')
         cmd = ['hg', 'clone', self._RO_HG_URL, ]
 
         client = subprocess.Popen(
@@ -675,6 +734,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                 os.path.join(os.getcwd(), self._basename(self._RO_HG_URL))))
 
     def test_hg_clone_from_rw_repository(self):
+        if not self.HAVE_HG:
+            self.skipTest('Mercurial is not available')
         cmd = ['hg', 'clone', self._RW_HG_URL, ]
 
         client = subprocess.Popen(
@@ -692,6 +753,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                 os.path.join(os.getcwd(), self._basename(self._RW_HG_URL))))
 
     def test_hg_clone_from_wrong_repository(self):
+        if not self.HAVE_HG:
+            self.skipTest('Mercurial is not available')
         url = '{}-rubbish'.format(self._RW_HG_URL)
         local = '{}-rubbish'.format(self._RW_HG_PATH)
         cmd = ['hg', 'clone', url, ]
@@ -716,6 +779,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                          .encode('utf-8'))
 
     def test_hg_pull_from_ro_repository(self):
+        if not self.HAVE_HG:
+            self.skipTest('Mercurial is not available')
         # First we clone the repo as it is.
         self._clone(self._RO_HG_URL)
 
@@ -745,7 +810,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         self.assertRegexpMatches(
             out,
             re.compile(
-                'pulling from {}\nsearching for changes\n'
+                'pulling from {}\n(searching for|requesting all) changes\n'
                 'adding changesets\nadding manifests\nadding file changes\n'
                 'added \d+ changesets with \d+ changes to \d+ files\n'
                 '\d+ files updated, \d+ files merged, \d+ files removed, '
@@ -754,6 +819,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                 re.S))
 
     def test_hg_pull_from_rw_repository(self):
+        if not self.HAVE_HG:
+            self.skipTest('Mercurial is not available')
         # First we clone the repo as it is.
         self._clone(self._RW_HG_URL)
 
@@ -783,7 +850,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         self.assertRegexpMatches(
             out,
             re.compile(
-                'pulling from {}\nsearching for changes\n'
+                'pulling from {}\n(searching for|requesting all) changes\n'
                 'adding changesets\nadding manifests\nadding file changes\n'
                 'added \d+ changesets with \d+ changes to \d+ files\n'
                 '\d+ files updated, \d+ files merged, \d+ files removed, '
@@ -792,6 +859,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                 re.S))
 
     def test_hg_push_to_read_only_repository(self):
+        if not self.HAVE_HG:
+            self.skipTest('Mercurial is not available')
         # Have to make a remote clone or the push would be local (slow i know).
         self._make_a_revision(self._RO_HG_URL)
 
@@ -821,6 +890,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             .encode('utf-8'))
         self.assertEqual(err, ''.encode('utf-8'))
         self.assertEqual(client.returncode, 1)
+
+    # TODO: def test_hg_push_to_read_write_repository(self):
 
     # -- Basic commands validatation tests ------------------------------------
 
