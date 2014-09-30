@@ -291,7 +291,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                 ro_repos=' '.join(read_only_repos),
                 rw_repos=' '.join(read_write_repos))
 
-        with BackupEditAndRestore('~/.gitconfig', 'a') as gitconfig:
+        with BackupEditAndRestore(os.path.expanduser('~/.gitconfig'),
+                                  'a') as gitconfig:
             gitconfig.write('''
 [user]
         name = Test User
