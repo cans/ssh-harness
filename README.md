@@ -1,12 +1,12 @@
-VCS-SSH -- VCS agnostic repository sharing through SSH
-======================================================
+VCS-SSH:  VCS agnostic repository sharing through SSH
+=====================================================
 
-
-Some people have very strong feelings about which version control system (vcs)
-is best, and which is *evil*. The approach of vcs-ssh is more pragmatical: in
-a world of open source development, you often find yourself using several of
-them. Indeed your code may depend on the code of others who do not use the
-same vcs as you do.
+Some people have very strong feelings about which version control
+system (vcs) is best, and which is *evil*. Understand which you should
+use and which you should not. The approach of vcs-ssh is more
+pragmatical: in a world of open source development, you often find
+yourself using several of them. Indeed your code may depend on the
+code of others who do not use the same vcs as you do.
 
 And in the opinion of the author, appart from the divide between the
 distributed vs. centralized VCS, there is not that much difference between
@@ -30,13 +30,17 @@ Features
   repositories (usefull e.g. for CI systems that only needs read-only access).
 
 
-How do I use vcs-ssh
---------------------
+How does one use vcs-ssh
+------------------------
 
 It is quite simple! If you known about public key access and command
 restrictions with SSH you probably have already guessed. 
-If you don't know about public key authentication with SSH you
-Anyhow, here how it works:
+If you don't know about public key authentication with SSH, you should probably
+investigate this first. There are plenty of HowTo on the net, to get you
+started. And if you really want to understand how it works in depth, I would
+recommand the [Snail Book](http://www.snailbook.com/).
+
+Anyhow, here is how you use it to works with vcs-ssh:
 
 Assume you are the user john on the machine named host. You login in to your
 account (locally or through SSH). You then create the directory ~/.ssh/, and
@@ -68,6 +72,7 @@ the two repositories listed after vcs-ssh: ``/path/to/some/repository`` and
 
 The great thing is that **it does not matter** that e.g.
 ``/path/to/some/repository`` is a *Git repository* and
-``/path/to/another/repository`` is a *Subversion directory* ! Routing the
-request to the appropiate vcs is what vcs-ssh does for you. One public key
-is sufficient to access as many repositories as you need ! whatever
+``/path/to/another/repository`` is a *Subversion repository* ! Routing
+your request to the appropiate vcs is what ``vcs-ssh`` does for
+you. One public key is sufficient to access as many repositories as
+you need !
