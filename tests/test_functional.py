@@ -17,7 +17,6 @@
 #  along with vs-ssh.  If not, see <http://www.gnu.org/licenses/>.
 #
 from __future__ import print_function
-from unittest import TestCase
 import os
 import shutil
 import subprocess
@@ -28,6 +27,22 @@ import sys
 
 from ssh_harness import PubKeyAuthSshClientTestCase, BackupEditAndRestore
 
+
+__ALL__ = [
+    '']
+
+_GIT_CONFIG_TEMPLATE = '''[user]
+        name = Test User
+        email = test@example.com
+[color]
+        ui = auto
+[push]
+        default = simple
+'''
+
+_HG_CONFIG_TEMPLATE = '''[ui]
+username = Test User <test@example.com>
+'''
 
 MODULE_PATH = os.path.abspath(os.path.dirname(__file__))
 PACKAGE_PATH = os.path.dirname(MODULE_PATH)
@@ -241,6 +256,18 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                     setattr(cls, attr, None)
 
     @classmethod
+    def _update_vcs_config(cls):
+        global _GIT_CONFIG_TEMPLATE, _HG_CONFIG_TEMPLATE
+        with BackupEditAndRestore(os.path.expanduser('~/.gitconfig'),
+                                  'a') as gitconfig:
+            gitconfig.write(_GIT_CONFIG_TEMPLATE)
+        cls._add_file_to_restore(gitconfig)
+
+        with BackupEditAndRestore(os.path.expanduser('~/.hgrc'), 'a') as hgrc:
+            hgrc.write(_HG_CONFIG_TEMPLATE)
+        cls._add_file_to_restore(hgrc)
+
+    @classmethod
     def setUpClass(cls):
         # We want all programs output to be in 'C' locale (makes output
         # independant of the user's environment)
@@ -248,7 +275,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         read_only_repos = []
         read_write_repos = []
 
-        # Some preconditions:
+        # Some preconditions:
         # cls.HAVE_BZR = cls._check_auxiliary_program('/usr/bin/bzr',
         #                                             error=False)
         cls.HAVE_HG = cls._check_auxiliary_program('/usr/bin/hg', error=False)
@@ -297,7 +324,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                 read_write_repos.append(getattr(cls, path_attr))
 
             else:
-                warning.warn(UserWarning, "...")
+                warnings.warn(UserWarning, "...")
                 pass
 
             if name.endswith('_git') and cls.HAVE_GIT:
@@ -309,11 +336,13 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                 cmd = ['svnadmin', 'create', '--fs-type', 'fsfs',
                        getattr(cls, path_attr), ]
             else:
-                warning.warn(UserWarning, "!!!")
+                warnings.warn(UserWarning, "!!!")
                 pass
-            res = subprocess.call(cmd,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE)
+            # TODO: check the command exit status, calling init_repository()
+            # is pointless if the command failed.
+            subprocess.call(cmd,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE)
 
             cls.init_repository(name,
                                 getattr(cls, path_attr),
@@ -327,24 +356,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                 ro_repos=' '.join(read_only_repos),
                 rw_repos=' '.join(read_write_repos))
 
-        with BackupEditAndRestore(os.path.expanduser('~/.gitconfig'),
-                                  'a') as gitconfig:
-            gitconfig.write('''
-[user]
-        name = Test User
-        email = test@example.com
-[color]
-        ui = auto
-[push]
-        default = simple
-''')
-        cls._add_file_to_restore(gitconfig)
-
-        with BackupEditAndRestore(os.path.expanduser('~/.hgrc'), 'a') as hgrc:
-           hgrc.write('''
-[ui]
-username = Test User <test@example.com>
-''')
+        cls._update_vcs_config()
         cls._get_program_version()
         super(VcsSshIntegrationTestCase, cls).setUpClass()
 
@@ -491,7 +503,8 @@ username = Test User <test@example.com>
         elif os.path.isdir('./.svn'):
             return 0  # Their is no such things as `push' in subversion.
         elif os.path.isdir('./.bzr'):
-            cmd = ['bzr', 'push', '-m', msg or default, ]
+            # TODO: review this
+            cmd = ['bzr', 'push', ]
         else:
             return 1
         return subprocess.call(cmd,

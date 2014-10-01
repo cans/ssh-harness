@@ -75,7 +75,6 @@ def rejectcommand(command, extra=""):
 
 
 def git_handle(cmdargv, rw_dirs, ro_dirs):
-    cwd = os.getcwd()
     path = cmdargv[1]
     repo = os.path.abspath(os.path.normpath(os.path.expanduser(path)))
 
@@ -131,7 +130,6 @@ def pipe_dispatch(cmd):
 
 
 def parse_args(argv):
-    cwd = os.getcwd()
     args = {
         # 'scp': args.SCP_ONLY,
         'rw_dirs': [],

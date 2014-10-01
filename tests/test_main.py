@@ -57,7 +57,6 @@ class MainTestCase(TestCase):
         self.assertFalse(git_handle_mock.called)
 
     def test_main_with_valid_git_command(self):
-        repo = 'ROREPO'
         os.environ['SSH_ORIGINAL_COMMAND'] = self._git_cmd
 
         with patch('vcs_ssh.git_handle') as git_handle_mock:
@@ -70,8 +69,7 @@ class MainTestCase(TestCase):
             [],
             [])
 
-    def test_main_with_hg_command_with_to_many_args(self):
-        repo = 'ROREPO'
+    def test_main_with_hg_command_with_too_many_args(self):
         os.environ['SSH_ORIGINAL_COMMAND'] = \
             '{} extranous'.format(self._hg_cmd)
 
@@ -81,8 +79,7 @@ class MainTestCase(TestCase):
         self.assertEqual(res, 255)
         self.assertFalse(hg_handle_mock.called)
 
-    def test_main_with_hg_command_with_to_many_args(self):
-        repo = 'ROREPO'
+    def test_main_with_hg_command(self):
         os.environ['SSH_ORIGINAL_COMMAND'] = self._hg_cmd
 
         with patch('vcs_ssh.hg_handle') as hg_handle_mock:
@@ -95,8 +92,7 @@ class MainTestCase(TestCase):
             [],
             [])
 
-    def test_main_with_hg_valid_command_but_unkown_repo(self):
-        repo = 'ROREPO'
+    def test_main_with_hg_valid_command_but_unknown_repo(self):
         os.environ['SSH_ORIGINAL_COMMAND'] = self._hg_cmd
 
         with patch('vcs_ssh.rejectrepo') as rejectrepo_mock:

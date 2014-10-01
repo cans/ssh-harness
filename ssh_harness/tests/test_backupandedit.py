@@ -3,7 +3,7 @@
 # Copyright © 2014, Nicolas CANIART <nicolas@caniart.net>
 #
 from __future__ import print_function
-from unittest import TestCase, SkipTest, skipIf
+from unittest import TestCase, skipIf
 import stat
 import os
 from sys import version_info as VERSION_INFO
@@ -228,7 +228,7 @@ class BackupEditAndRestoreTestCase(TestCase):
 
     def test_file_is_copied_when_mode_is_a(self):
         with BackupEditAndRestore(self._existing_path, 'a',
-                                  suffix=self._suffix) as f:
+                                  suffix=self._suffix):
             # Is the original file still present
             self.assertTrue(os.path.isfile(self._existing_path))
             # Has a backup copy been created
@@ -261,7 +261,7 @@ class BackupEditAndRestoreTestCase(TestCase):
 
     def test_edition_file_is_properly_removed_at_exit_with_mode_rp(self):
         with BackupEditAndRestore(self._existing_path, 'r+t',
-                                  suffix=self._suffix) as f:
+                                  suffix=self._suffix):
             pass
         # check that the backup file still does not exist
         self.assertTrue(os.path.isfile(self._existing_backup_path))
@@ -272,7 +272,7 @@ class BackupEditAndRestoreTestCase(TestCase):
 
     def test_edition_file_is_properly_removed_at_exit_with_mode_a(self):
         with BackupEditAndRestore(self._existing_path, 'a',
-                                  suffix=self._suffix) as f:
+                                  suffix=self._suffix):
             pass
         # check that the backup file still does not exist
         self.assertTrue(os.path.isfile(self._existing_backup_path))
@@ -363,7 +363,7 @@ class BackupEditAndRestoreTestCase(TestCase):
     def test_inexistant_file_fails_when_mode_is_r(self):
         with self.assertRaises(ValueError):
             with BackupEditAndRestore(self._inexistant_path, 'r',
-                                      suffix=self._suffix) as f:
+                                      suffix=self._suffix):
                 pass
 
         # Well nothing happened so no file should exist.
@@ -374,7 +374,7 @@ class BackupEditAndRestoreTestCase(TestCase):
     def test_inexistant_file_fails_when_mode_is_rp(self):
         with self.assertRaises(IOError):
             with BackupEditAndRestore(self._inexistant_path, 'r+',
-                                      suffix=self._suffix) as f:
+                                      suffix=self._suffix):
                 pass
 
         # Well nothing happened so no file should exist.
@@ -386,7 +386,7 @@ class BackupEditAndRestoreTestCase(TestCase):
     def test_inexistant_file_fails_when_mode_is_U(self):
         with self.assertRaises(ValueError):
             with BackupEditAndRestore(self._inexistant_path, 'U',
-                                      suffix=self._suffix) as f:
+                                      suffix=self._suffix):
                 pass
 
         # Well nothing happened so no file should exist.
@@ -398,7 +398,7 @@ class BackupEditAndRestoreTestCase(TestCase):
     def test_inexistant_file_fails_when_mode_is_Up(self):
         with self.assertRaises(IOError):
             with BackupEditAndRestore(self._inexistant_path, 'U+',
-                                      suffix=self._suffix) as f:
+                                      suffix=self._suffix):
                 pass
 
         # Well nothing happened so no file should exist.
@@ -409,7 +409,7 @@ class BackupEditAndRestoreTestCase(TestCase):
     def test_file_fails_when_mode_is_r(self):
         with self.assertRaises(ValueError):
             with BackupEditAndRestore(self._existing_path, 'r',
-                                      suffix=self._suffix) as f:
+                                      suffix=self._suffix):
                 pass
 
         # Making sure no junk is left behind
@@ -422,7 +422,7 @@ class BackupEditAndRestoreTestCase(TestCase):
     def test_file_fails_when_mode_is_U(self):
         with self.assertRaises(ValueError):
             with BackupEditAndRestore(self._existing_path, 'U',
-                                      suffix=self._suffix) as f:
+                                      suffix=self._suffix):
                 pass
 
         # Making sure no junk is left behind

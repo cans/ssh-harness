@@ -20,8 +20,6 @@ try:
     from unittest.mock import Mock, patch
 except:
     from mock import Mock, patch
-import multiprocessing
-import os
 from unittest import TestCase
 
 from vcs_ssh import rejectpush, rejectcommand

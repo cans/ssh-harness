@@ -24,10 +24,8 @@ import shutil
 import signal
 import stat
 import subprocess
-import sys
 import traceback
 import pwd
-import io
 from locale import getpreferredencoding
 
 
@@ -77,7 +75,7 @@ class BackupEditAndRestore(object):
         platform which do not have an atomic rename."""
         try:
             os.rename(src, dst)
-        except OSError as e:
+        except OSError:
             try:
                 # For windows.
                 os.remove(dst)
@@ -197,7 +195,8 @@ class BaseSshClientTestCase(TestCase):
          scripts/
          user@host: workdir$ python -m tests
          ...
-         user@host: workdir$ python-coverage run -m tests --sources=module1,module2
+         user@host: workdir$ python-coverage run -m tests \
+             --sources=module1,module2
          ...
          user@host: workdir$ python-coverage html
          ...
@@ -271,6 +270,26 @@ class BaseSshClientTestCase(TestCase):
     disabled in SSHD configuration. Adding one or more key/value pairs to the
     dictionnary implicitly enables their use.
 
+
+    ===Some notes about SSHD configuration===
+
+    There are options that very important for the successfull run of the
+    test written using this class. Disabling or enabling either of them will
+    most likely make your tests fail:
+
+    :IgnoreUserKnownHosts:
+        You should never enable this option (set it to ``yes``). Indeed this
+        class uses the ``~/.ssh/known_hosts`` file to prevent the host key
+        validation prompt to show up during your tests.
+        If you run your tests uninteractively, e.g. on a CI machine, your
+        tests will fail as they will timeout, waiting someone to validate
+        the host key received from the server, which noone can do.
+
+    :UseLogin:
+        You should never enable this option (set it to ``yes``). Running login
+        requires root privileges, which you surely are not as
+        *noone should never ever* run a test suite as root.
+
     .. todo::
 
        - Improve reporting problems internal to this testcase class. As most
@@ -298,10 +317,7 @@ class BaseSshClientTestCase(TestCase):
        - What about the SFTP subsystem ? (Should be disabled by default)
     """
 
-    try:
-        MODULE_PATH = os.path.abspath(os.path.dirname(__file__))
-    except (AttributeError, NameError):
-        MODULE_PATH = os.path.abspath(os.path.dirname(__source__))
+    MODULE_PATH = os.path.abspath(os.path.dirname(__file__))
     FIXTURE_PATH = os.path.sep.join([
         os.path.abspath(os.getcwd()), 'tests', 'fixtures', 'sshd', ])
 
@@ -404,7 +420,6 @@ PermitUserEnvironment {permit_environment}
 IgnoreRhosts yes
 RhostsRSAAuthentication no
 HostbasedAuthentication no
-# IgnoreUserKnownHosts yes <Never enable this or you will not be able to connect>
 
 PermitEmptyPasswords no
 ChallengeResponseAuthentication no
@@ -427,7 +442,6 @@ X11DisplayOffset 10
 PrintMotd no
 PrintLastLog no
 TCPKeepAlive yes
-#UseLogin no <Default, but would not work otherwise running login requires to be root>
 Banner none
 AcceptEnv LANG LC_*
 
@@ -462,7 +476,7 @@ UsePAM yes
             return 'rsa'
 
     @classmethod
-    def _exc2error(exc):
+    def _exc2error(cls, exc):
         if exc is not None:
             cls._errors['_skip(exc={})'.format(exc)] = \
                 traceback.format_exc()
@@ -497,7 +511,7 @@ UsePAM yes
 
         # Ok we got the directory, but since the mask passed to chmod is
         # umask-ed we may not have the right permissions. So we must check
-        # them anyway.
+        # them anyway.
 
         # Do we have the required permission
         res = os.stat(path)
@@ -534,34 +548,34 @@ UsePAM yes
                 os.unlink(key_file)
             try:
                 process = subprocess.Popen(
-                    ['ssh-keygen', '-t', key_type, '-b', cls._BITS[key_type], '-N',
-                     '', '-f', key_file, '-C',
+                    ['ssh-keygen', '-t', key_type, '-b', cls._BITS[key_type],
+                     '-N', '', '-f', key_file, '-C',
                      'Weak key generated for test purposes only '
                      '*DO NOT DISSEMINATE*'],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE)
                 process.communicate()
             except subprocess.CalledProcessError:
-                raise Exception('ssh-keygen failed with exit-status {} output:\n==STDOUT==\n"{}"\n==STDERR==\n{}'.format(
-                        process.returncode, process.stdout.read(), process.stderr.read()))
+                raise Exception('ssh-keygen failed with exit-status {} output:'
+                                '\n==STDOUT==\n"{}"\n==STDERR==\n{}'
+                                .format(process.returncode,
+                                        process.stdout.read(),
+                                        process.stderr.read()))
             else:
                 if 0 != process.returncode:
-                    raise Exception('ssh-keygen failed with exit-status {} output:\n==STDOUT==\n"{}"\n==STDERR==\n{}'.format(
-                        process.returncode, process.stdout.read(), process.stderr.read()))
+                    raise Exception('ssh-keygen failed with exit-status {} '
+                                    'output:\n==STDOUT==\n"{}"\n==STDERR==\n{}'
+                                    .format(process.returncode,
+                                            process.stdout.read(),
+                                            process.stderr.read()))
                 else:
                     os.chmod(key_file, cls._KEY_FILES_MODE)
-
-    @classmethod
-    def _get_paths(cls, path):
-        new_path = '{}.test-harness'.format(regular_path)
-        backup_path = '{}.test-harness-backup'.format(regular_path)
-        return new_path, backup_path
 
     @classmethod
     def _generate_environment_file(cls):
         if cls.SSH_ENVIRONMENT_FILE is False:
             return
-        with BackupEditAndRestore(self.SSH_ENVIRONMENT_PATH, 'w+t') as f:
+        with BackupEditAndRestore(cls.SSH_ENVIRONMENT_PATH, 'w+t') as f:
             for k, v in cls.SSH_ENVIRONMENT.items():
                 print("{}={}".format(k, v), file=f)
 
@@ -731,7 +745,7 @@ Host {ssh_config_host_name}
         pc_met = cls._check_auxiliary_program(cls.SSH_KEYSCAN_BIN) and pc_met
         pc_met = cls._check_auxiliary_program(cls.SSH_KEYGEN_BIN) and pc_met
         if not pc_met:
-           cls._skip()
+            cls._skip()
 
     @classmethod
     def setUpClass(cls):

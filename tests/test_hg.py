@@ -17,9 +17,9 @@
 #  along with vs-ssh.  If not, see <http://www.gnu.org/licenses/>.
 #
 try:
-    from unittest.mock import Mock, patch
+    from unittest.mock import patch
 except:
-    from mock import Mock, patch
+    from mock import patch
 import os
 from unittest import TestCase
 
