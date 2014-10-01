@@ -10,4 +10,4 @@ install:
   - pip install coverage
   - pip install mock
 script:
-  - ./runtests.sh
+  - ./run-tests.sh
