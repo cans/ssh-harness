@@ -40,10 +40,18 @@ import shlex
 import subprocess
 from sys import stderr, version_info as VERSION_INFO
 
-if (3, 0, 0) > VERSION_INFO:
+if (3, 0, 0, ) > VERSION_INFO:
     from mercurial import demandimport
     demandimport.enable()
     from mercurial import dispatch
+
+__all__ = [
+    'main',
+    'parse_args',
+    'VERSION',
+    ]
+
+VERSION = (1, 0, 0, )
 
 
 def rejectpush(*args, **kwargs):
@@ -72,6 +80,23 @@ def rejectcommand(command, extra=""):
         extra = ": {}".format(extra)
     stderr.write('remote: Illegal command "{}"{}\n'.format(command, extra))
     return 255
+
+
+def warn_no_access_control(vcs_name):
+    stderr.write(
+        'remote: Warning: using {}: no access control enforced!\n'
+        .format(vcs_name))
+
+
+if (3, 0, 0, ) > VERSION_INFO:
+    def bzr_handle(cmdargv, rw_dirs, ro_dirs):
+        # For now this is all we do.
+        return pipe_dispatch(cmdargv)
+else:
+    # Bazaar not ported to Python 3, so this is pretty much all we can do
+    # so far.
+    def bzr_handle(cmdargv, rw_dirs, ro_dirs):
+        return pipe_dispatch(cmdargv)
 
 
 def git_handle(cmdargv, rw_dirs, ro_dirs):
@@ -114,13 +139,14 @@ def hg_handle(cmdargv, rw_dirs, ro_dirs):
     else:
         return rejectrepo(repo)
 
+
 if (3, 0, 0) > VERSION_INFO:
     def hg_dispatch(cmdargv):
         return dispatch.dispatch(dispatch.request(cmdargv))
 else:
     # mercurial not ported to Python 3 yet (and they have no plan to do so !)
     def hg_dispatch(cmdargv):
-        pipe_dispatch(['hg', ] + cmdargv)
+        return pipe_dispatch(['hg', ] + cmdargv)
 
 
 def pipe_dispatch(cmd):
@@ -150,6 +176,9 @@ def parse_args(argv):
     parser.add_argument('--read-write', metavar='DIR', dest='RW_DIRS',
                         help="path to repository directories, to which grant "
                         "access in r/w mode", nargs='+', default=[])
+    parser.add_argument('-v', '--version',
+                        action='version',
+                        version='vcs-ssh version {}.{}.{}'.format(*VERSION))
     # parser.add_argument('--scp-only', type=bool, default=False, metavar=None,
     #                     help='SCP read-only restricted access')
 
@@ -182,9 +211,12 @@ def main(rw_dirs=None, ro_dirs=None):
     elif (('git-receive-pack' == cmdargv[0] or 'git-upload-pack' == cmdargv[0])
           and 2 == len(cmdargv)):
         return git_handle(cmdargv, rw_dirs, ro_dirs)
+    elif cmdargv == [
+            'bzr', 'serve', '--inet', '--directory=/', '--allow-writes']:
+        warn_no_access_control('Bazaar')
+        return bzr_handle(cmdargv, rw_dirs, ro_dirs)
     elif "svnserve -t" == orig_cmd:
-        stderr.write(
-            'remote: Warning: using Subversion no access control enforced!\n')
+        warn_no_access_control('Subversion')
         return pipe_dispatch(cmdargv)
     else:
         return rejectcommand(orig_cmd)

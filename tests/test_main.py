@@ -18,12 +18,13 @@
 #
 try:
     from unittest.mock import Mock, patch
-except:
+except ImportError:
     from mock import Mock, patch
 import os
 from unittest import TestCase
 
 from vcs_ssh import main
+from .test_bzr import BZR_COMMAND
 
 
 class MainTestCase(TestCase):
@@ -33,6 +34,7 @@ class MainTestCase(TestCase):
         self._hg_cmd = 'hg -R {} serve --stdio'.format(self._repo_name)
         self._git_cmd = 'git-upload-pack {}'.format(self._repo_name)
         self._svn_cmd = 'svnserve -t'
+        self._bzr_cmd = BZR_COMMAND
         self._unparsable_cmd = \
             'git-receive-pack "unterminated-quoted-repo-name'
         self._side_effect = 'foo-bar'
@@ -129,6 +131,19 @@ class MainTestCase(TestCase):
         stderr_mock.write.assert_called_once_with(
             'remote: Illegal command "{}": No closing quotation\n'
             .format(self._unparsable_cmd))
+
+    def test_main_with_bzr_command(self):
+        os.environ['SSH_ORIGINAL_COMMAND'] = \
+            self._bzr_cmd * 1
+        with patch('vcs_ssh.warn_no_access_control') as warn_no_ac_mock:
+            with patch('vcs_ssh.bzr_handle') as bzr_handle_mock:
+                bzr_handle_mock.return_value = 0xEE
+                res = main()
+
+        self.assertEqual(res, 0xEE)
+        bzr_handle_mock.assert_called_once_with(
+            self._bzr_cmd.split(' '), [], [])
+        warn_no_ac_mock.assert_called_once_with('Bazaar')
 
 
 # vim: syntax=python:sws=4:sw=4:et:

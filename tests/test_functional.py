@@ -201,6 +201,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         'rw_hg': 'fixtures/hg-rw',
         'ro_svn': 'fixtures/svn-ro',
         'rw_svn': 'fixtures/svn-rw',
+        'rw_bzr': 'fixtures/bzr-rw',
         }
     """The list of repositories we create for our tests on per access mode (ro, rw)
        and handled VCS type
@@ -248,8 +249,12 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                 out = out.splitlines()[0]
                 match = rex.search(out)
                 if match is not None:
-                    setattr(cls, attr,
-                            tuple(match.groupdict()['version'].split('.')))
+                    setattr(cls,
+                            attr,
+                            tuple([int(x)
+                                   for x in match.groupdict()['version'].split(
+                                       '.'.encode('utf-8'))
+                                   ]))
                 else:
                     # bazaar
                     out.split()[-1]
@@ -276,8 +281,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         read_write_repos = []
 
         # Some preconditions:
-        # cls.HAVE_BZR = cls._check_auxiliary_program('/usr/bin/bzr',
-        #                                             error=False)
+        cls.HAVE_BZR = cls._check_auxiliary_program('/usr/bin/bzr',
+                                                    error=False)
         cls.HAVE_HG = cls._check_auxiliary_program('/usr/bin/hg', error=False)
         cls.HAVE_GIT = cls._check_auxiliary_program('/usr/bin/git',
                                                     error=False)
@@ -295,26 +300,36 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             url_attr = '_{}_URL'.format(upper_name)
             local_attr = '_{}_LOCAL'.format(upper_name)
 
+            local_scheme = 'file://'
+            if name.endswith('_git'):
+                # otherwise Git is confused when trying a push
+                local_scheme = ''
+
+            url_scheme = 'ssh'
+            if name.endswith('_bzr'):
+                url_scheme = 'bzr+' + url_scheme
+            elif name.endswith('_svn'):
+                url_scheme = 'svn+' + url_scheme
+
             setattr(cls, path_attr, os.path.join(MODULE_PATH, path))
             if cls.UPDATE_SSH_CONFIG is False:
                 # Forces us of address + port syntax
                 setattr(cls, url_attr,
-                        'ssh://{address}:{port}{path}'.format(
+                        '{scheme}://{address}:{port}{path}'.format(
                             path=double_slash(getattr(cls, path_attr), name),
                             address=cls.BIND_ADDRESS,
-                            port=cls.PORT))
+                            port=cls.PORT,
+                            scheme=url_scheme))
             else:
                 setattr(cls, url_attr,
-                        'ssh://{ssh_config_host_name}{path}'.format(
+                        '{scheme}://{ssh_config_host_name}{path}'.format(
                             path=double_slash(getattr(cls, path_attr), name),
-                            ssh_config_host_name=cls.SSH_CONFIG_HOST_NAME))
+                            ssh_config_host_name=cls.SSH_CONFIG_HOST_NAME,
+                            scheme=url_scheme))
 
-            scheme = 'file://'
-            if path.endswith('git'):
-                scheme = ''
             setattr(cls, local_attr,
                     '{scheme}{path}'.format(
-                        scheme=scheme,
+                        scheme=local_scheme,
                         path=getattr(cls, path_attr)))
 
             if name.startswith('ro_'):
@@ -335,8 +350,10 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             elif name.endswith('_svn') and cls.HAVE_SVNADMIN and cls.HAVE_SVN:
                 cmd = ['svnadmin', 'create', '--fs-type', 'fsfs',
                        getattr(cls, path_attr), ]
+            elif name.endswith('_bzr') and cls.HAVE_BZR:
+                cmd = ['bzr', 'init', '--no-tree', getattr(cls, path_attr), ]
             else:
-                warnings.warn(UserWarning, "!!!")
+                warnings.warn("!!!", UserWarning)
                 pass
             # TODO: check the command exit status, calling init_repository()
             # is pointless if the command failed.
@@ -430,6 +447,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             cmd = ['hg', 'clone', url, ]
         elif repo_basename.startswith('svn-'):
             cmd = ['svn', 'checkout', url, ]
+        elif repo_basename.startswith('bzr-'):
+            cmd = ['bzr', 'branch', url, ]
         return subprocess.call(cmd,
                                stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE)
@@ -504,7 +523,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             return 0  # Their is no such things as `push' in subversion.
         elif os.path.isdir('./.bzr'):
             # TODO: review this
-            cmd = ['bzr', 'push', ]
+            cmd = ['bzr', 'push', ':parent', ]
         else:
             return 1
         return subprocess.call(cmd,
@@ -905,6 +924,101 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         self.assertEqual(client.returncode, 1)
 
     # TODO: def test_hg_push_to_read_write_repository(self):
+
+    # -- Bazaar related tests -------------------------------------------------
+
+    def test_bzr_branch_from_repository(self):
+        if not self.HAVE_BZR:
+            self.skipTest('Bazaar is not available')
+        cmd = ['bzr', 'branch', self._RW_BZR_URL, ]
+
+        client = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE)
+        out, err = client.communicate()
+
+        self._debug(out, err, client)
+
+        self.assertEqual(client.returncode, 0)
+        self.assertTrue(
+            os.path.isdir(
+                os.path.join(os.getcwd(), self._basename(self._RW_BZR_URL))))
+
+    def test_bzr_pull_from_repository(self):
+        if not self.HAVE_BZR:
+            self.skipTest('Bazaar is not available')
+
+        self._clone(self._RW_BZR_URL)
+        cmd = ['bzr', 'pull', self._RW_BZR_URL, ]
+
+        # Then we add something to pull to the repository (by
+        # making a new revision in another, local, working copy)
+        self._make_a_revision_and_push_it(self._RW_BZR_LOCAL)
+
+        self._enter_working_copy(self._RW_BZR_URL)
+        client = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE)
+        out, err = client.communicate()
+        self._leave_working_copy()
+
+        self._debug(out, err, client)
+
+        self.assertEqual(client.returncode, 0)
+        self.assertTrue(
+            os.path.isdir(
+                os.path.join(os.getcwd(), self._basename(self._RW_BZR_URL))))
+        self.assertEqual(
+            err,
+            ' M  content\nAll changes applied successfully.'
+            '\nremote: Warning: using Bazaar: no access control enforced!\n'
+            .encode('utf-8'))
+        self.assertRegexpMatches(
+            out,
+            re.compile(
+                'Now on revision \d+.'
+                .format(self._RW_BZR_URL).encode('utf-8'),
+                re.S))
+
+    def test_bzr_send_to_repository(self):
+        if not self.HAVE_BZR:
+            self.skipTest('Bazaar is not available')
+
+        self._clone(self._RW_BZR_URL)
+        cmd = ['bzr', 'push', self._RW_BZR_URL, ]
+
+        self._enter_working_copy(self._RW_BZR_URL)
+        self._do_make_a_revision()
+        client = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE)
+        out, err = client.communicate()
+        self._leave_working_copy()
+
+        self._debug(out, err, client)
+
+        self.assertEqual(client.returncode, 0)
+        self.assertTrue(
+            os.path.isdir(
+                os.path.join(os.getcwd(), self._basename(self._RW_BZR_URL))))
+        self.assertRegexpMatches(
+            err,
+            re.compile(
+                'Pushed up to revision \d.\n'
+                'remote: Warning: using Bazaar: no access control enforced!\n'
+                ''.encode('utf-8'),
+                re.S))
+        self.assertRegexpMatches(
+            out,
+            re.compile(
+                ''.format(self._RW_BZR_URL).encode('utf-8'),
+                re.S))
 
     # -- Basic commands validatation tests ------------------------------------
 
