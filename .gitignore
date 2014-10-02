@@ -1,7 +1,10 @@
 *~
+*.egg-info
 *.pyc
-__pycache__
-.coverage*
-htmlcov
-*.tap
 *.swp
+*.tap
+.coverage*
+__pycache__
+build
+dist
+htmlcov
