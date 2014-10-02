@@ -25,6 +25,7 @@ import signal
 import stat
 import subprocess
 import traceback
+import time
 import pwd
 from locale import getpreferredencoding
 
@@ -391,6 +392,9 @@ class BaseSshClientTestCase(TestCase):
     _KNOWN_HOSTS_PATH = os.path.expanduser('~/.ssh/known_hosts')
     _SSH_ENVIRONMENT_PATH = os.path.expanduser('~/.ssh/environment')
     _SSH_CONFIG_PATH = os.path.expanduser('~/.ssh/config')
+    _SSHD = None
+    """Handle on the SSH daemon process."""
+
     _SSHD_CONFIG = '''# ssh_harness generated configuration file
 Port {port}
 ListenAddress {address}
@@ -452,7 +456,6 @@ UsePAM yes
 
     @classmethod
     def _skip(cls):
-
         # Be civil, clean-up anyways.
         cls.tearDownClass()
 
@@ -485,20 +488,17 @@ UsePAM yes
     def _check_auxiliary_program(cls, path, error=True):
         if not os.path.isfile(path):
             if error:
-                cls._errors['_check_auxiliary_program({})'.format(path)] = \
-                    'Program not found.'
+                cls._errors[path] = 'Program not found.'
             return False
 
-        res = os.stat(path)
-        if cls._BIN_MASK != (res.st_mode & cls._BIN_MASK):
-            if error:
-                cls._errors['_check_auxilary_program({})'.format(path)] =     \
-                    "Program `{}' is not executable, its mode is {},"         \
-                    " expected {}".format(
-                        cls._mode2string(stat.S_IMODE(res.st_mode)),
-                        cls._mode2string(stat.S_IMODE(cls._BIN_MASK)))
-            return False
-        return True
+        res = os.access(path, os.R_OK | os.X_OK)
+        if res is False and error is True:
+            cls._errors[path] =     \
+                "Program `{}' is not executable, its mode is {},"         \
+                " expected {}".format(
+                    cls._mode2string(stat.S_IMODE(res.st_mode)),
+                    cls._mode2string(stat.S_IMODE(cls._BIN_MASK)))
+        return res
 
     @classmethod
     def _check_dir(cls, path, mode):
@@ -579,7 +579,7 @@ UsePAM yes
             for k, v in cls.SSH_ENVIRONMENT.items():
                 print("{}={}".format(k, v), file=f)
 
-        cls._NEED_TO_BE_RESTORED.append(f)
+        cls._add_file_to_restore(f)
 
     @classmethod
     def _generate_authzd_keys_file(cls):
@@ -639,9 +639,22 @@ UsePAM yes
     @classmethod
     def _start_sshd(cls):
         # Start the SSH daemon
-        cls._SSHD = subprocess.call([
-            '/usr/sbin/sshd', '-4', '-f', cls.SSHD_CONFIG_PATH])
-        assert 0 == cls._SSHD
+        cls._SSHD = subprocess.Popen([
+            '/usr/sbin/sshd', '-D', '-4', '-f', cls.SSHD_CONFIG_PATH])
+
+        # This is silly, but simple enough and works apparently
+        rounds = 0
+        while not os.path.isfile(cls.SSHD_PIDFILE_PATH) and 5 > rounds:
+            time.sleep(1)
+            rounds += 1
+        if rounds >= 5:
+            self._errors['ssh daemon'] = 'Not starting or crashing at startup.'
+            self._skip()
+
+    @classmethod
+    def _kill_sshd(cls):
+        cls._SSHD.terminate()
+        return cls._SSHD.poll()
 
     @classmethod
     def _update_ssh_config(cls, args):
@@ -655,7 +668,7 @@ Host {ssh_config_host_name}
         Port {port}
         IdentityFile {identity}
 '''.format(**args))
-        cls._NEED_TO_BE_RESTORED.append(user_config)
+        cls._add_file_to_restore(user_config)
 
     @classmethod
     def _update_user_known_hosts(cls):
@@ -682,7 +695,7 @@ Host {ssh_config_host_name}
                 # Seems we got what we need, save it.
                 known_hosts.write(
                     out.decode(known_hosts.encoding or _ENCODING))
-        cls._NEED_TO_BE_RESTORED.append(known_hosts)
+        cls._add_file_to_restore(known_hosts)
 
     @classmethod
     def _mode2string(cls, mode):
@@ -775,17 +788,8 @@ Host {ssh_config_host_name}
     @classmethod
     def tearDownClass(cls):
         # If the server was started.
-        if hasattr(cls, 'SSHD_PIDFILE_PATH'):
-            try:
-                with open(cls.SSHD_PIDFILE_PATH, 'r') as pidfile:
-                    daemon_pid = int(pidfile.read())
-                os.kill(daemon_pid, signal.SIGTERM)
-            except IOError as e:
-                if errno.ENOENT == e.errno:
-                    # Assuming server died (which is not ok... but for now)
-                    pass
-                else:
-                    raise
+        if cls._SSHD is not None:
+            cls._kill_sshd()
 
         for f in cls._FILES.keys():
             file = getattr(cls, '{}_PATH'.format(f))
@@ -799,7 +803,6 @@ Host {ssh_config_host_name}
                 cls._delete_file(file)
 
         for backup in cls._NEED_TO_BE_RESTORED:
-            print('Restoring: {}'.format(backup.name))
             backup.restore()
 
         # Now that we destroyed all keys we can restore the modes of the
