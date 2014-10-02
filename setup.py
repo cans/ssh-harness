@@ -31,7 +31,7 @@ setup(name='vcs-ssh',
       author_email='nicolas@caniart.net',
       description='VCS agnostic sharing through SSH',
       url='http://www.caniart.net/devel/vcs-ssh/',
-      download_url='https://github.com/peterldowns/mypackage/tarball/{}'
+      download_url='https://github.com/cans/vcs-ssh/tarball/{}'
           .format(_version),
       py_modules=[
           'vcs_ssh',
