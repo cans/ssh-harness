@@ -681,7 +681,7 @@ Host {ssh_config_host_name}
                 cls.BIND_ADDRESS, ],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE)
-            (out, errout) = keyscanner.communicate()
+            (out, err) = keyscanner.communicate()
 
             # We check the length of `out` because in case of connection
             # failure, ssh-keyscan still exit with 0, but spits nothing.
@@ -689,7 +689,7 @@ Host {ssh_config_host_name}
                 cls._errors['_update_user_know_hosts'] = (
                     'ssh-keyscan failed with status {}: {}\nOutput: {}'
                     .format(keyscanner.returncode,
-                            errout.decode(known_hosts.encoding),
+                            err.decode(known_hosts.encoding or _ENCODING),
                             out.decode(known_hosts.encoding or _ENCODING)))
             else:
                 # Seems we got what we need, save it.
