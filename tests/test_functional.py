@@ -22,6 +22,7 @@ import shutil
 import subprocess
 from tempfile import mkdtemp
 import warnings
+from locale import getpreferredencoding
 import re
 import sys
 
@@ -47,6 +48,7 @@ username = Test User <test@example.com>
 MODULE_PATH = os.path.abspath(os.path.dirname(__file__))
 PACKAGE_PATH = os.path.dirname(MODULE_PATH)
 TEMP_PATH = os.path.join(MODULE_PATH, 'tmp')
+_ENCODING = getpreferredencoding(do_setlocal=False)
 
 # BEGIN TO BE REMOVED
 
@@ -264,11 +266,11 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
     def _update_vcs_config(cls):
         global _GIT_CONFIG_TEMPLATE, _HG_CONFIG_TEMPLATE
         with BackupEditAndRestore(os.path.expanduser('~/.gitconfig'),
-                                  'a') as gitconfig:
+                                  'w') as gitconfig:
             gitconfig.write(_GIT_CONFIG_TEMPLATE)
         cls._add_file_to_restore(gitconfig)
 
-        with BackupEditAndRestore(os.path.expanduser('~/.hgrc'), 'a') as hgrc:
+        with BackupEditAndRestore(os.path.expanduser('~/.hgrc'), 'w') as hgrc:
             hgrc.write(_HG_CONFIG_TEMPLATE)
         cls._add_file_to_restore(hgrc)
 
@@ -342,6 +344,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                 warnings.warn(UserWarning, "...")
                 pass
 
+            cmd = None
             if name.endswith('_git') and cls.HAVE_GIT:
                 cmd = ['git', 'init', '--bare', '-q',
                        getattr(cls, path_attr), ]
@@ -353,17 +356,29 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             elif name.endswith('_bzr') and cls.HAVE_BZR:
                 cmd = ['bzr', 'init', '--no-tree', getattr(cls, path_attr), ]
             else:
-                warnings.warn("!!!", UserWarning)
+                warnings.warn(
+                    "Could not find which VCS use to initialized the "
+                    "repository name {} ({}).".format(name, path), UserWarning)
                 pass
-            # TODO: check the command exit status, calling init_repository()
-            # is pointless if the command failed.
-            subprocess.call(cmd,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE)
+            if cmd is not None:
+                # TODO: check the command exit status, calling init_repository()
+                # is pointless if the command failed.
+                prc = subprocess.Popen(cmd,
+                                       stdout=subprocess.PIPE,
+                                       stderr=subprocess.PIPE)
+                (out, err) = prc.communicate()
 
-            cls.init_repository(name,
-                                getattr(cls, path_attr),
-                                getattr(cls, local_attr))
+                if 0 != prc.returncode:
+                    cls._errors['Creating repository {}'.format(name)] = \
+                        'Command failed with status {}:\n'               \
+                        'Error output:{}\nOutput:{}'                     \
+                        .format(prc.returncode,
+                                out.decode(_ENCODING),
+                                err.decode(_ENCODING))
+                else:
+                    cls.init_repository(name,
+                                        getattr(cls, path_attr),
+                                        getattr(cls, local_attr))
 
         cls.AUTHORIZED_KEY_OPTIONS = (
             'command="{basedir}/vcs-ssh '
