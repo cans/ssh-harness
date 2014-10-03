@@ -21,10 +21,6 @@ import os
 import sys
 from tempfile import TemporaryFile
 from unittest import TestCase
-try:
-    from unittest.mock import patch
-except ImportError:
-    from mock import patch
 
 from vcs_ssh import parse_args, VERSION
 
@@ -146,10 +142,10 @@ class VcsSshArgsParserTestCase(TestCase):
     def test_version_option(self):
         with IOCapture(stderr=True) as ioc:
             with self.assertRaises(SystemExit):
-                args = parse_args(self._rw_dirs * 1
-                                  + ['--read-only', ]
-                                  + self._ro_dirs * 1
-                                  + ['-v', ])
+                parse_args(self._rw_dirs * 1
+                           + ['--read-only', ]
+                           + self._ro_dirs * 1
+                           + ['-v', ])
         if Py3:
             self.assertEqual(ioc.get_stderr(), '')
             self.assertEqual(ioc.get_stdout(), self._version)
