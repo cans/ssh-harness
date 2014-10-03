@@ -18,10 +18,8 @@
 #
 from __future__ import print_function
 from unittest import TestCase, SkipTest
-import errno
 import os
 import shutil
-import signal
 import stat
 import subprocess
 import traceback
@@ -648,8 +646,8 @@ UsePAM yes
             time.sleep(1)
             rounds += 1
         if rounds >= 5:
-            self._errors['ssh daemon'] = 'Not starting or crashing at startup.'
-            self._skip()
+            cls._errors['ssh daemon'] = 'Not starting or crashing at startup.'
+            cls._skip()
 
     @classmethod
     def _kill_sshd(cls):
