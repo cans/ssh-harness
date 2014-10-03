@@ -361,8 +361,6 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                     "repository name {} ({}).".format(name, path), UserWarning)
                 pass
             if cmd is not None:
-                # TODO: check the command exit status, calling init_repository()
-                # is pointless if the command failed.
                 prc = subprocess.Popen(cmd,
                                        stdout=subprocess.PIPE,
                                        stderr=subprocess.PIPE)
