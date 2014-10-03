@@ -20,7 +20,6 @@ try:
     from unittest.mock import patch
 except:
     from mock import patch
-import os
 from unittest import TestCase
 
 from vcs_ssh import bzr_handle
