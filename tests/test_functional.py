@@ -393,6 +393,14 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         cls._create_fixture_repositories()
 
     @classmethod
+    def _preconditions(cls):
+        pc_met = cls._check_dir(os.path.join(cls.MODULE_PATH, 'tmp'))
+
+        super(VcsSshIntegrationTestCase, cls)._preconditions()
+        if not pc_met:
+            self._skip()
+
+    @classmethod
     def tearDownClass(cls):
         super(VcsSshIntegrationTestCase, cls).tearDownClass()
         for name, repo in cls._REPOSITORIES.items():
