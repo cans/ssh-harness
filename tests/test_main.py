@@ -23,6 +23,8 @@ except ImportError:
 import os
 from unittest import TestCase
 
+from ssh_harness.contexts import IOCapture
+
 from vcs_ssh import main
 from .test_bzr import BZR_COMMAND
 
@@ -45,16 +47,23 @@ class MainTestCase(TestCase):
             del os.environ['SSH_ORIGINAL_COMMAND']
 
     def test_main_without_command(self):
-        res = main()
+        with IOCapture(stdout=False, stderr=True, module='vcs_ssh') as ioc:
+            res = main()
+
         self.assertEqual(res, 255)
+        self.assertEqual(ioc.get_stderr(), 'remote: Illegal command "?"\n')
 
     def test_main_with_git_command_with_too_many_args(self):
         os.environ['SSH_ORIGINAL_COMMAND'] = \
             '{} extranous'.format(self._git_cmd)
 
         with patch('vcs_ssh.git_handle') as git_handle_mock:
-            res = main()
+            with IOCapture(stderr=True, stdout=False, module='vcs_ssh') as ioc:
+                res = main()
 
+        self.assertEqual(
+            ioc.get_stderr(),
+            'remote: Illegal command "git-upload-pack SOMEREPO extranous"\n')
         self.assertEqual(res, 255)
         self.assertFalse(git_handle_mock.called)
 
@@ -75,9 +84,14 @@ class MainTestCase(TestCase):
         os.environ['SSH_ORIGINAL_COMMAND'] = \
             '{} extranous'.format(self._hg_cmd)
 
-        with patch('vcs_ssh.hg_handle') as hg_handle_mock:
-            res = main()
+        with IOCapture(stdout=False, stderr=True, module='vcs_ssh') as ioc:
+            with patch('vcs_ssh.hg_handle') as hg_handle_mock:
+                res = main()
 
+        self.assertEqual(
+            ioc.get_stderr(),
+            'remote: Illegal command "hg -R SOMEREPO serve --stdio '
+            'extranous"\n')
         self.assertEqual(res, 255)
         self.assertFalse(hg_handle_mock.called)
 
@@ -111,10 +125,14 @@ class MainTestCase(TestCase):
         process_mock = Mock()
         process_mock.returncode = self._side_effect
 
-        with patch('vcs_ssh.subprocess.Popen') as popen_mock:
-            popen_mock.return_value = process_mock
-            res = main()
+        with IOCapture(stdout=False, stderr=True, module='vcs_ssh') as ioc:
+            with patch('vcs_ssh.subprocess.Popen') as popen_mock:
+                popen_mock.return_value = process_mock
+                res = main()
 
+        self.assertEqual(
+            ioc.get_stderr(),
+            'remote: Warning: using Subversion: no access control enforced!\n')
         popen_mock.assert_called_once_with(
             self._svn_cmd.split(),
             shell=False)

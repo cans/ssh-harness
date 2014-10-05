@@ -2,19 +2,19 @@
 #
 #  Copyright © 2014, Nicolas CANIART <nicolas@caniart.net>
 #
-#  This file is part of vs-ssh.
+#  This file is part of vcs-ssh.
 #
-#  vs-ssh is free software: you can redistribute it and/or modify
+#  vcs-ssh is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License version 2 as
 #  published by the Free Software Foundation.
 #
-#  vs-ssh is distributed in the hope that it will be useful,
+#  vcs-ssh is distributed in the hope that it will be useful,
 #  but WITHOUT ANY WARRANTY; without even the implied warranty of
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU General Public License for more details.
 #
 #  You should have received a copy of the GNU General Public License
-#  along with vs-ssh.  If not, see <http://www.gnu.org/licenses/>.
+#  along with vcs-ssh.  If not, see <http://www.gnu.org/licenses/>.
 #
 try:
     from unittest.mock import patch
@@ -23,7 +23,11 @@ except:
 import os
 from unittest import TestCase
 
+from ssh_harness.contexts import IOCapture
 from vcs_ssh import git_handle
+
+VCS_SSH_MESSAGE = 'remote: \x1b[1;41mYou only have read only access to this ' \
+    'repository\x1b[0m: you cannot push anything into it !\n'
 
 
 class GitHandleTestCase(TestCase):
@@ -61,22 +65,31 @@ class GitHandleTestCase(TestCase):
             self._push_cmd, ] + self._rw_absdirs)
 
     def test_git_push_to_ro_repository(self):
-        with patch('vcs_ssh.pipe_dispatch') as pipe_dispatch_mock:
-            pipe_dispatch_mock.return_value = 0
-            res = git_handle(
-                self._push_command_ro.split(),
-                self._rw_absdirs,
-                self._ro_absdirs)
+        with IOCapture(stdout=False, stderr=True, module='vcs_ssh') as ioc:
+            with patch('vcs_ssh.pipe_dispatch') as pipe_dispatch_mock:
+                pipe_dispatch_mock.return_value = 0
+                res = git_handle(
+                    self._push_command_ro.split(),
+                    self._rw_absdirs,
+                    self._ro_absdirs)
+
+        self.assertEqual(
+            ioc.get_stderr(),
+            VCS_SSH_MESSAGE)
         self.assertEqual(res, 255)
         self.assertFalse(pipe_dispatch_mock.called)
 
     def test_git_push_to_ko_repository(self):
-        with patch('vcs_ssh.pipe_dispatch') as pipe_dispatch_mock:
-            pipe_dispatch_mock.return_value = 0
-            res = git_handle(
-                self._push_command_ko.split(),
-                self._rw_absdirs,
-                self._ro_absdirs)
+        with IOCapture(stdout=False, stderr=True, module='vcs_ssh') as ioc:
+            with patch('vcs_ssh.pipe_dispatch') as pipe_dispatch_mock:
+                pipe_dispatch_mock.return_value = 0
+                res = git_handle(
+                    self._push_command_ko.split(),
+                    self._rw_absdirs,
+                    self._ro_absdirs)
+        self.assertEqual(
+            ioc.get_stderr(),
+            'Illegal repository "/home/ncaniart/src/gitco/vcs-ssh/WRONG"\n')
         self.assertEqual(res, 255)
         self.assertFalse(pipe_dispatch_mock.called)
 
@@ -103,12 +116,17 @@ class GitHandleTestCase(TestCase):
             self._pull_cmd, ] + self._ro_absdirs)
 
     def test_git_pull_from_ko_repository(self):
-        with patch('vcs_ssh.pipe_dispatch') as pipe_dispatch_mock:
-            pipe_dispatch_mock.return_value = 0
-            res = git_handle(
-                self._pull_command_ko.split(),
-                self._rw_absdirs,
-                self._ro_absdirs)
+        with IOCapture(stdout=False, stderr=True, module='vcs_ssh') as ioc:
+            with patch('vcs_ssh.pipe_dispatch') as pipe_dispatch_mock:
+                pipe_dispatch_mock.return_value = 0
+                res = git_handle(
+                    self._pull_command_ko.split(),
+                    self._rw_absdirs,
+                    self._ro_absdirs)
+
+        self.assertEqual(
+            ioc.get_stderr(),
+            'Illegal repository "/home/ncaniart/src/gitco/vcs-ssh/WRONG"\n')
         self.assertEqual(res, 255)
         self.assertFalse(pipe_dispatch_mock.called)
 
