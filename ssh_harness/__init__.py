@@ -381,7 +381,9 @@ UsePAM yes
         return res
 
     @classmethod
-    def _check_dir(cls, path, mode):
+    def _check_dir(cls, path, mode=None):
+        if mode is None:
+            mode = stat.S_IRWXU
         if not os.path.isdir(path):
             try:
                 os.makedirs(path, mode)
@@ -629,11 +631,11 @@ Host {ssh_config_host_name}
         #     pc_met = <condition> and pc_met
         # That way we preserve the truth value of pc_met and we can report as
         # many problems as we can at once.
-        pc_met = cls._check_dir(res.pw_dir, stat.S_IRWXU)
-        pc_met = cls._check_dir(os.path.dirname(cls._SSH_CONFIG_PATH),
-                                stat.S_IRWXU) and pc_met
-        pc_met = cls._check_dir(os.getcwd(), stat.S_IRWXU) and pc_met
-        pc_met = cls._check_dir(cls.FIXTURE_PATH, stat.S_IRWXU) and pc_met
+        pc_met = cls._check_dir(res.pw_dir)
+        pc_met = cls._check_dir(os.path.dirname(cls._SSH_CONFIG_PATH)) \
+            and pc_met
+        pc_met = cls._check_dir(os.getcwd()) and pc_met
+        pc_met = cls._check_dir(cls.FIXTURE_PATH) and pc_met
         pc_met = cls._check_auxiliary_program(cls.SSHD_BIN) and pc_met
         pc_met = cls._check_auxiliary_program(cls.SSH_KEYSCAN_BIN) and pc_met
         pc_met = cls._check_auxiliary_program(cls.SSH_KEYGEN_BIN) and pc_met
