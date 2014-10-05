@@ -35,15 +35,21 @@ You can use pattern matching of your normal shell, e.g.:
 command="vcs-ssh user/thomas/* projects/{mercurial,foo}"
 """
 import argparse
+from functools import wraps
 import os
 import shlex
 import subprocess
 from sys import stderr, version_info as VERSION_INFO
 
+HAVE_MERCURIAL = False
 if (3, 0, 0, ) > VERSION_INFO:
-    from mercurial import demandimport
-    demandimport.enable()
-    from mercurial import dispatch
+    try:
+        from mercurial import demandimport
+        demandimport.enable()
+        from mercurial import dispatch
+        HAVE_MERCURIAL = True
+    except ImportError:
+        pass
 
 __all__ = [
     'main',
@@ -51,7 +57,24 @@ __all__ = [
     'VERSION',
     ]
 
-VERSION = (1, 0, 1, )
+VERSION = (1, 0, 2, )
+
+
+def have_required_command(func):
+    """Provides feedback to the user that is much nicer than the traceback
+    of a failed call to one of the subprocess's module function, when a
+    command is missing."""
+    @wraps(func)
+    def wrap(command, rw_dirs, ro_dirs):
+        system_path = os.getenv('PATH').split(os.pathsep)
+        for directory in system_path:
+            binary = os.path.join(directory, command[0])
+            if os.path.isfile(binary) and os.access(binary, os.R_OK | os.X_OK):
+                return func(command, rw_dirs, ro_dirs)
+        stderr.write('The command required to fulfill your request has not '
+                     'been found on this system.')
+        return 254
+    return wrap
 
 
 def rejectpush(*args, **kwargs):
@@ -89,16 +112,19 @@ def warn_no_access_control(vcs_name):
 
 
 if (3, 0, 0, ) > VERSION_INFO:
+    @have_required_command
     def bzr_handle(cmdargv, rw_dirs, ro_dirs):
         # For now this is all we do.
         return pipe_dispatch(cmdargv)
 else:
     # Bazaar not ported to Python 3, so this is pretty much all we can do
     # so far.
+    @have_required_command
     def bzr_handle(cmdargv, rw_dirs, ro_dirs):
         return pipe_dispatch(cmdargv)
 
 
+@have_required_command
 def git_handle(cmdargv, rw_dirs, ro_dirs):
     path = cmdargv[1]
     repo = os.path.abspath(os.path.normpath(os.path.expanduser(path)))
@@ -115,6 +141,7 @@ def git_handle(cmdargv, rw_dirs, ro_dirs):
     return pipe_dispatch(cmdargv)
 
 
+@have_required_command
 def hg_handle(cmdargv, rw_dirs, ro_dirs):
     do_dispatch = False
 
@@ -140,7 +167,7 @@ def hg_handle(cmdargv, rw_dirs, ro_dirs):
         return rejectrepo(repo)
 
 
-if (3, 0, 0) > VERSION_INFO:
+if HAVE_MERCURIAL:
     def hg_dispatch(cmdargv):
         return dispatch.dispatch(dispatch.request(cmdargv))
 else:
