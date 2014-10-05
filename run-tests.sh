@@ -38,6 +38,9 @@ COVERAGE="$(which python-coverage)"
   exit 1 ;                                                     \
   }
 
+[ -d "tests/fixtures" ] && rm -rf tests/fixtures
+[ -d "tests/tmp" ] && rm -rf tests/tmp
+
 cat > "${COVERAGERC}" <<EOF
 [run]
 branch = True
