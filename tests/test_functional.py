@@ -20,17 +20,14 @@ from __future__ import print_function
 import os
 import shutil
 import subprocess
-from tempfile import mkdtemp
 import warnings
 from locale import getpreferredencoding
 import re
 import sys
 
 from ssh_harness import PubKeyAuthSshClientTestCase, BackupEditAndRestore
+from ssh_harness.contexts import InThrowableTempDir
 
-
-__ALL__ = [
-    '']
 
 _GIT_CONFIG_TEMPLATE = '''[user]
         name = Test User
@@ -111,67 +108,6 @@ def maybe_bytes(ref, mystr):
     if isinstance(ref, bytes) and str != bytes:
         return bytes(mystr, encoding='utf-8')
     return mystr
-
-
-class InThrowableTempDir(object):
-    """
-    Context manager that puts your program in a pristine temporary directory
-    upon entry and puts you back where you were upon exit. It also cleans
-    the temporary directory
-    """
-
-    def __init__(self, suffix='', prefix='throw-', dir=None):
-        if not os.path.isdir(dir):
-            # Py3 uses 0o700 for octal not plain 0700 (where the fuck did
-            # that come from!)
-            os.makedirs(dir, mode=448)
-
-        # to make sure mkdtemp returns an absolute path which it may not
-        # if given a relative path as its :param:`dir` keyword-argument.
-        # It is important to prevent removing a directory that is not the
-        # one we intended to when exiting the context manager.
-        dir = os.path.abspath(dir)
-        self._dir = mkdtemp(suffix=suffix, prefix=prefix, dir=dir)
-        self._oldpwd = None
-
-    @property
-    def path(self):
-        """Path to the temporary directory created by the context manager."""
-        return self._dir
-
-    @property
-    def old_path(self):
-        """Path
-
-        .. note::
-
-           This attribute value will remain `None` until you enter the context.
-        """
-        return self._oldpwd
-
-    def __enter__(self):
-        if os.getcwd() != self._dir:
-            self._oldpwd = os.getcwd()
-            os.chdir(self._dir)
-        else:
-            warnings.warn(
-                "Already in the temporary directory !",
-                UserWarning)
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        os.chdir(self._oldpwd)
-
-        def ignore(f, p, e):
-            pass
-
-        shutil.rmtree(self._dir,
-                      ignore_errors=False,
-                      onerror=ignore)
-
-        if exc_type is not None:
-            return False
-        return True
 
 
 class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
@@ -275,29 +211,82 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         cls._add_file_to_restore(hgrc)
 
     @classmethod
-    def _create_fixture_repositories(cls):
+    def init_repository(cls, url):
+        """Publish a first revision to the given repository.
 
+        We do this to have more consistent outputs from the different
+        vcs we add a first revision to each. Indeed a first commit may
+        create a first branch or something, which changes the
+        output. And not doing this would make the results expected by
+        the tests sensitive to the order in which they are run, which is
+        obviously undiserable."""
+        inst = cls()
+        inst.setUp()
+
+        res = inst._make_a_revision_and_push_it(url, msg="Initial commit.")
+        return 0 == res
+
+    @classmethod
+    def _create_fixture_repositories(cls):
         for name, path in cls._REPOSITORIES.items():
             upper_name = name.upper()
             path_attr = '_{}_PATH'.format(upper_name)
             local_attr = '_{}_LOCAL'.format(upper_name)
 
+            # Create a HAVE_<REPO BASENAME> flag so we can skip a test if the
+            # repotory initialization fails.
+            basename = cls._basename(
+                getattr(cls, local_attr)).upper().replace('-', '_')
+            attr_name = 'HAVE_{}_REPOSITORY'.format(basename)
+            if hasattr(cls, attr_name):
+                warnings.warn('Ambiguous repository name', UserWarning)
+            setattr(cls, attr_name, True)
+
             cmd = None
-            if name.endswith('_git') and cls.HAVE_GIT:
+            if name.endswith('_git'):
+                if not cls.HAVE_GIT:
+                    warnings.warn(
+                        "VCS {} not installed skip creating repository: {}"
+                        .format('Mercurial', path), UserWarning)
+                    continue
+
                 cmd = ['git', 'init', '--bare', '-q',
                        getattr(cls, path_attr), ]
-            elif name.endswith('_hg') and cls.HAVE_HG:
+
+            elif name.endswith('_hg'):
+                if not cls.HAVE_HG:
+                    warnings.warn(
+                        "VCS {} not installed skip creating repository: {}"
+                        .format('Mercurial', path), UserWarning)
+                    continue
+
                 cmd = ['hg', 'init', getattr(cls, path_attr), ]
-            elif name.endswith('_svn') and cls.HAVE_SVNADMIN and cls.HAVE_SVN:
+
+            elif name.endswith('_svn'):
+                if not (cls.HAVE_SVNADMIN and cls.HAVE_SVN):
+                    warnings.warn(
+                        "VCS {} not installed skip creating repository: {}"
+                        .format('Subversion', path), UserWarning)
+                    continue
+
                 cmd = ['svnadmin', 'create', '--fs-type', 'fsfs',
                        getattr(cls, path_attr), ]
-            elif name.endswith('_bzr') and cls.HAVE_BZR:
+
+            elif name.endswith('_bzr'):
+                if not cls.HAVE_BZR:
+                    warnings.warn(
+                        "VCS {} not installed skip creating repository: {}"
+                        .format('Bazaar', path), UserWarning)
+                    continue
+
                 cmd = ['bzr', 'init', '--no-tree', getattr(cls, path_attr), ]
+
             else:
                 warnings.warn(
                     "Could not find which VCS use to initialized the "
                     "repository name {} ({}).".format(name, path), UserWarning)
                 pass
+
             if cmd is not None:
                 prc = subprocess.Popen(cmd,
                                        stdout=subprocess.PIPE,
@@ -312,9 +301,12 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                                 out.decode(_ENCODING),
                                 err.decode(_ENCODING))
                 else:
-                    cls.init_repository(name,
-                                        getattr(cls, path_attr),
-                                        getattr(cls, local_attr))
+                    # Attempt to create a first revision and update the
+                    # HAVE_*_REPOSITORY flag according to the success of the
+                    # attempt.
+                    setattr(cls,
+                            attr_name,
+                            cls.init_repository(getattr(cls, local_attr)))
 
     @classmethod
     def setUpClass(cls):
@@ -409,12 +401,6 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             shutil.rmtree(getattr(cls, path_attr),
                           ignore_errors=True)
 
-    @classmethod
-    def init_repository(cls, name, path, url):
-        inst = cls()
-        inst.setUp()
-        inst._make_a_revision_and_push_it(url, msg="Initial commit.")
-
     def setUp(self):
         # Used to memoïze repository working copy directory name
         self._repo_basename = None
@@ -455,12 +441,34 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                       hexerr=hexerr.getvalue(),
                       status=client.returncode))
 
-    def _basename(self, url):
-        if self._repo_basename is None:
-            self._repo_basename = os.path.basename(url)
-            if self._repo_basename.endswith('.git'):
-                self._repo_basename = self._repo_basename[0:-4]
-        return self._repo_basename
+    def _exec_and_warn_if_fails(self, cmd, action):
+        proc = subprocess.Popen(cmd,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
+        (out, err) = proc.communicate()
+        if 0 != proc.returncode:
+            warnings.warn(
+                '{} operation failed ({}):\n'
+                '{}'.format(action,
+                            proc.returncode,
+                            err.encode(_ENCODING)),
+                UserWarning)
+        return proc.returncode
+
+    @classmethod
+    def _do_basename(cls, url):
+        basename = os.path.basename(url)
+        if basename.endswith('.git'):
+            basename = basename[0:-4]
+        return basename
+
+    @classmethod
+    def _basename(cls, url):
+        if not isinstance(cls, type):
+            if getattr(cls, '_repo_basename', None) is None:
+                setattr(cls, '_repo_basename', cls._do_basename(url))
+            return getattr(cls, '_repo_basename')
+        return cls._do_basename(url)
 
     def _clone(self, url):
         repo_basename = self._basename(url)
@@ -472,9 +480,10 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             cmd = ['svn', 'checkout', url, ]
         elif repo_basename.startswith('bzr-'):
             cmd = ['bzr', 'branch', url, ]
-        return subprocess.call(cmd,
-                               stdout=subprocess.PIPE,
-                               stderr=subprocess.PIPE)
+        else:
+            return 1
+
+        return self._exec_and_warn_if_fails(cmd, 'Checkout/Clone')
 
     def _enter_working_copy(self, url, path=None):
         if path is None:
@@ -500,9 +509,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             cmd = ['bzr', 'add', 'content', ]
         else:
             return 1
-        return subprocess.call(cmd,
-                               stderr=subprocess.PIPE,
-                               stdout=subprocess.PIPE)
+        return self._exec_and_warn_if_fails(cmd, 'Add')
 
     def _do_content(self):
         if os.path.isfile('./content') is False:
@@ -527,9 +534,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             cmd = ['bzr', 'commit', '-m', msg or default, ]
         else:
             return 1
-        return subprocess.call(cmd,
-                               stderr=subprocess.PIPE,
-                               stdout=subprocess.PIPE)
+        return self._exec_and_warn_if_fails(cmd, 'Commit')
 
     def _commit(self, url, expect=None, path=None, msg=None):
         self._enter_working_copy(url, path=path)
@@ -549,9 +554,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             cmd = ['bzr', 'push', ':parent', ]
         else:
             return 1
-        return subprocess.call(cmd,
-                               stdout=subprocess.PIPE,
-                               stderr=subprocess.PIPE)
+        return self._exec_and_warn_if_fails(cmd, 'Push')
 
     def _push(self, url, path=None):
         self._enter_working_copy(url, path=path)
@@ -590,6 +593,11 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
     def test_git_clone_from_read_only_repo(self):
         if not self.HAVE_GIT:
             self.skipTest('Git is not available')
+        if not self.HAVE_GIT_RO_REPOSITORY:
+            self.skipTest(
+                'Fixture repository creation failed (look above for '
+                'warnings).')
+
         cmd = ['git', 'clone', self._RO_GIT_URL, ]
 
         client = subprocess.Popen(
@@ -604,6 +612,11 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
     def test_git_clone_from_read_write_repo(self):
         if not self.HAVE_GIT:
             self.skipTest('Git is not available')
+        if not self.HAVE_GIT_RW_REPOSITORY:
+            self.skipTest(
+                'Fixture repository creation failed (look above for '
+                'warnings).')
+
         cmd = [
             'git',
             'clone',
@@ -621,6 +634,11 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
     def test_git_pull_from_read_only_repo(self):
         if not self.HAVE_GIT:
             self.skipTest('Git is not available')
+        if not self.HAVE_GIT_RO_REPOSITORY:
+            self.skipTest(
+                'Fixture repository creation failed (look above for '
+                'warnings).')
+
         # First we clone the repo as it is.
         self._clone(self._RO_GIT_URL)
         cmd = [
@@ -644,7 +662,6 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         self._debug(out, err, client)
 
         self.assertEqual(client.returncode, 0)
-
         self.assertRegexpMatches(
             err,
             maybe_bytes(
@@ -668,6 +685,10 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
     def test_git_pull_from_read_write_repo(self):
         if not self.HAVE_GIT:
             self.skipTest('Git is not available')
+        if not self.HAVE_GIT_RW_REPOSITORY:
+            self.skipTest(
+                'Fixture repository creation failed (look above for '
+                'warnings).')
         # First we clone the repo as it is.
         self._clone(self._RW_GIT_URL)
 
@@ -710,6 +731,12 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                 re.S))
 
     def test_git_push_to_read_write_repo(self):
+        if not self.HAVE_GIT:
+            self.skipTest('Git is not available')
+        if not self.HAVE_GIT_RW_REPOSITORY:
+            self.skipTest(
+                'Fixture repository creation failed (look above for '
+                'warnings).')
         # Have to make a remote clone or the push would be local (slow i know).
         self._make_a_revision(self._RW_GIT_URL)
 
@@ -741,6 +768,11 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
     def test_git_push_to_read_only_repo(self):
         if not self.HAVE_GIT:
             self.skipTest('Git is not available')
+        if not self.HAVE_GIT_RO_REPOSITORY:
+            self.skipTest(
+                'Fixture repository creation failed (look above for '
+                'warnings).')
+
         # Have to make a remote clone or the push would be local (slow i know).
         self._make_a_revision(self._RO_GIT_URL)
 
@@ -836,6 +868,11 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
     def test_hg_pull_from_ro_repository(self):
         if not self.HAVE_HG:
             self.skipTest('Mercurial is not available')
+        if not self.HAVE_HG_RO_REPOSITORY:
+            self.skipTest(
+                'Fixture repository creation failed (look above for '
+                'warnings).')
+
         # First we clone the repo as it is.
         self._clone(self._RO_HG_URL)
 
@@ -876,8 +913,13 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
     def test_hg_pull_from_rw_repository(self):
         if not self.HAVE_HG:
             self.skipTest('Mercurial is not available')
+        if not self.HAVE_HG_RW_REPOSITORY:
+            self.skipTest(
+                'Fixture repository creation failed (look above for '
+                'warnings).')
+
         # First we clone the repo as it is.
-        self._clone(self._RW_HG_URL)
+        self.assertEqual(self._clone(self._RW_HG_URL), 0)
 
         cmd = [
             'hg',
@@ -887,7 +929,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
 
         # Then we add something to pull to the repository (by
         # making a new revision in another, local, working copy)
-        self._make_a_revision_and_push_it(self._RW_HG_LOCAL)
+        self.assertEqual(self._make_a_revision_and_push_it(self._RW_HG_LOCAL),
+                         0)
 
         self._enter_working_copy(self._RW_HG_URL)
         client = subprocess.Popen(
@@ -916,6 +959,11 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
     def test_hg_push_to_read_only_repository(self):
         if not self.HAVE_HG:
             self.skipTest('Mercurial is not available')
+        if not self.HAVE_HG_RO_REPOSITORY:
+            self.skipTest(
+                'Fixture repository creation failed (look above for '
+                'warnings).')
+
         # Have to make a remote clone or the push would be local (slow i know).
         self._make_a_revision(self._RO_HG_URL)
 
@@ -953,6 +1001,11 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
     def test_bzr_branch_from_repository(self):
         if not self.HAVE_BZR:
             self.skipTest('Bazaar is not available')
+        if not self.HAVE_BZR_RW_REPOSITORY:
+            self.skipTest(
+                'Fixture repository creation failed (look above for '
+                'warnings).')
+
         cmd = ['bzr', 'branch', self._RW_BZR_URL, ]
 
         client = subprocess.Popen(
@@ -972,6 +1025,10 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
     def test_bzr_pull_from_repository(self):
         if not self.HAVE_BZR:
             self.skipTest('Bazaar is not available')
+        if not self.HAVE_BZR_RW_REPOSITORY:
+            self.skipTest(
+                'Fixture repository creation failed (look above for '
+                'warnings).')
 
         self._clone(self._RW_BZR_URL)
         cmd = ['bzr', 'pull', self._RW_BZR_URL, ]
@@ -1010,6 +1067,10 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
     def test_bzr_send_to_repository(self):
         if not self.HAVE_BZR:
             self.skipTest('Bazaar is not available')
+        if not self.HAVE_BZR_RW_REPOSITORY:
+            self.skipTest(
+                'Fixture repository creation failed (look above for '
+                'warnings).')
 
         self._clone(self._RW_BZR_URL)
         cmd = ['bzr', 'push', self._RW_BZR_URL, ]
