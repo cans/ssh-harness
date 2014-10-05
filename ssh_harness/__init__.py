@@ -205,7 +205,7 @@ class BaseSshClientTestCase(TestCase):
     AUTH_METHOD_PASSWORD = (True, False, )
     AUTH_METHOD_PUBKEY = (False, True, )
     PORT = 2200
-    BIND_ADDRESS = '127.0.0.1'
+    BIND_ADDRESS = 'localhost'
 
     USE_AUTH_METHOD = None
 
