@@ -48,7 +48,7 @@ username = Test User <test@example.com>
 MODULE_PATH = os.path.abspath(os.path.dirname(__file__))
 PACKAGE_PATH = os.path.dirname(MODULE_PATH)
 TEMP_PATH = os.path.join(MODULE_PATH, 'tmp')
-_ENCODING = getpreferredencoding(do_setlocal=False)
+_ENCODING = getpreferredencoding(do_setlocale=False)
 
 # BEGIN TO BE REMOVED
 
@@ -275,10 +275,53 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         cls._add_file_to_restore(hgrc)
 
     @classmethod
+    def _create_fixture_repositories(cls):
+
+        for name, path in cls._REPOSITORIES.items():
+            upper_name = name.upper()
+            path_attr = '_{}_PATH'.format(upper_name)
+            local_attr = '_{}_LOCAL'.format(upper_name)
+
+            cmd = None
+            if name.endswith('_git') and cls.HAVE_GIT:
+                cmd = ['git', 'init', '--bare', '-q',
+                       getattr(cls, path_attr), ]
+            elif name.endswith('_hg') and cls.HAVE_HG:
+                cmd = ['hg', 'init', getattr(cls, path_attr), ]
+            elif name.endswith('_svn') and cls.HAVE_SVNADMIN and cls.HAVE_SVN:
+                cmd = ['svnadmin', 'create', '--fs-type', 'fsfs',
+                       getattr(cls, path_attr), ]
+            elif name.endswith('_bzr') and cls.HAVE_BZR:
+                cmd = ['bzr', 'init', '--no-tree', getattr(cls, path_attr), ]
+            else:
+                warnings.warn(
+                    "Could not find which VCS use to initialized the "
+                    "repository name {} ({}).".format(name, path), UserWarning)
+                pass
+            if cmd is not None:
+                prc = subprocess.Popen(cmd,
+                                       stdout=subprocess.PIPE,
+                                       stderr=subprocess.PIPE)
+                (out, err) = prc.communicate()
+
+                if 0 != prc.returncode:
+                    cls._errors['Creating repository {}'.format(name)] = \
+                        'Command failed with status {}:\n'               \
+                        'Error output:{}\nOutput:{}'                     \
+                        .format(prc.returncode,
+                                out.decode(_ENCODING),
+                                err.decode(_ENCODING))
+                else:
+                    cls.init_repository(name,
+                                        getattr(cls, path_attr),
+                                        getattr(cls, local_attr))
+
+    @classmethod
     def setUpClass(cls):
         # We want all programs output to be in 'C' locale (makes output
         # independant of the user's environment)
         os.putenv('LANG', 'C')  # TODO: not reset on tests completion
+
         read_only_repos = []
         read_write_repos = []
 
@@ -344,40 +387,6 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                 warnings.warn(UserWarning, "...")
                 pass
 
-            cmd = None
-            if name.endswith('_git') and cls.HAVE_GIT:
-                cmd = ['git', 'init', '--bare', '-q',
-                       getattr(cls, path_attr), ]
-            elif name.endswith('_hg') and cls.HAVE_HG:
-                cmd = ['hg', 'init', getattr(cls, path_attr), ]
-            elif name.endswith('_svn') and cls.HAVE_SVNADMIN and cls.HAVE_SVN:
-                cmd = ['svnadmin', 'create', '--fs-type', 'fsfs',
-                       getattr(cls, path_attr), ]
-            elif name.endswith('_bzr') and cls.HAVE_BZR:
-                cmd = ['bzr', 'init', '--no-tree', getattr(cls, path_attr), ]
-            else:
-                warnings.warn(
-                    "Could not find which VCS use to initialized the "
-                    "repository name {} ({}).".format(name, path), UserWarning)
-                pass
-            if cmd is not None:
-                prc = subprocess.Popen(cmd,
-                                       stdout=subprocess.PIPE,
-                                       stderr=subprocess.PIPE)
-                (out, err) = prc.communicate()
-
-                if 0 != prc.returncode:
-                    cls._errors['Creating repository {}'.format(name)] = \
-                        'Command failed with status {}:\n'               \
-                        'Error output:{}\nOutput:{}'                     \
-                        .format(prc.returncode,
-                                out.decode(_ENCODING),
-                                err.decode(_ENCODING))
-                else:
-                    cls.init_repository(name,
-                                        getattr(cls, path_attr),
-                                        getattr(cls, local_attr))
-
         cls.AUTHORIZED_KEY_OPTIONS = (
             'command="{basedir}/vcs-ssh '
             '--read-write {rw_repos} '
@@ -389,6 +398,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         cls._update_vcs_config()
         cls._get_program_version()
         super(VcsSshIntegrationTestCase, cls).setUpClass()
+        cls._create_fixture_repositories()
 
     @classmethod
     def tearDownClass(cls):
