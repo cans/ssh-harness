@@ -21,6 +21,7 @@ try:
 except:
     from mock import patch
 import os
+import re
 from unittest import TestCase
 
 from ssh_harness.contexts import IOCapture
@@ -31,6 +32,9 @@ VCS_SSH_MESSAGE = 'remote: \x1b[1;41mYou only have read only access to this ' \
 
 
 class GitHandleTestCase(TestCase):
+
+    _ILLEGAL_REPOSITORY_RE = re.compile('Illegal repository "/.*/WRONG"\n',
+                                        re.S)
 
     def setUp(self):
         self._cwd = os.getcwd()
@@ -87,9 +91,8 @@ class GitHandleTestCase(TestCase):
                     self._push_command_ko.split(),
                     self._rw_absdirs,
                     self._ro_absdirs)
-        self.assertEqual(
-            ioc.get_stderr(),
-            'Illegal repository "/home/ncaniart/src/gitco/vcs-ssh/WRONG"\n')
+        self.assertRegexpMatches(
+            ioc.get_stderr(), self._ILLEGAL_REPOSITORY_RE)
         self.assertEqual(res, 255)
         self.assertFalse(pipe_dispatch_mock.called)
 
@@ -124,9 +127,8 @@ class GitHandleTestCase(TestCase):
                     self._rw_absdirs,
                     self._ro_absdirs)
 
-        self.assertEqual(
-            ioc.get_stderr(),
-            'Illegal repository "/home/ncaniart/src/gitco/vcs-ssh/WRONG"\n')
+        self.assertRegexpMatches(
+            ioc.get_stderr(), self._ILLEGAL_REPOSITORY_RE)
         self.assertEqual(res, 255)
         self.assertFalse(pipe_dispatch_mock.called)
 
