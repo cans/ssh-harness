@@ -288,25 +288,26 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                 pass
 
             if cmd is not None:
-                prc = subprocess.Popen(cmd,
-                                       stdout=subprocess.PIPE,
-                                       stderr=subprocess.PIPE)
-                (out, err) = prc.communicate()
+                cls._exec_and_warn_if_fails(cmd, 'Create')
+                # prc = subprocess.Popen(cmd,
+                #                        stdout=subprocess.PIPE,
+                #                        stderr=subprocess.PIPE)
+                # (out, err) = prc.communicate()
 
-                if 0 != prc.returncode:
-                    cls._errors['Creating repository {}'.format(name)] = \
-                        'Command failed with status {}:\n'               \
-                        'Error output:{}\nOutput:{}'                     \
-                        .format(prc.returncode,
-                                out.decode(_ENCODING),
-                                err.decode(_ENCODING))
-                else:
-                    # Attempt to create a first revision and update the
-                    # HAVE_*_REPOSITORY flag according to the success of the
-                    # attempt.
-                    setattr(cls,
-                            attr_name,
-                            cls.init_repository(getattr(cls, local_attr)))
+                # if 0 != prc.returncode:
+                #     cls._errors['Creating repository {}'.format(name)] = \
+                #         'Command failed with status {}:\n'               \
+                #         'Error output:{}\nOutput:{}'                     \
+                #         .format(prc.returncode,
+                #                 out.decode(_ENCODING),
+                #                 err.decode(_ENCODING))
+                # else:
+                # Attempt to create a first revision and update the
+                # HAVE_*_REPOSITORY flag according to the success of the
+                # attempt.
+                setattr(cls,
+                        attr_name,
+                        cls.init_repository(getattr(cls, local_attr)))
 
     @classmethod
     def setUpClass(cls):
@@ -449,7 +450,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                       hexerr=hexerr.getvalue(),
                       status=client.returncode))
 
-    def _exec_and_warn_if_fails(self, cmd, action):
+    @classmethod
+    def _exec_and_warn_if_fails(cls, cmd, action):
         proc = subprocess.Popen(cmd,
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE)
@@ -477,6 +479,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                 setattr(cls, '_repo_basename', cls._do_basename(url))
             return getattr(cls, '_repo_basename')
         return cls._do_basename(url)
+
+    # -- Basic VCS workflow emulation functions -------------------------------
 
     def _clone(self, url):
         repo_basename = self._basename(url)
