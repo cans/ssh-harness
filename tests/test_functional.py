@@ -683,7 +683,10 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                 '   [0-9a-f]{{7}}\.\.[0-9a-f]{{7}}) +'
                 'master     -> origin/master\n'
                 .format(self._RO_GIT_URL[:-4])))
-        if self.GIT_VERSION < (2, 0, 0):
+        # Git output changed over time. This change has been seen with version
+        # as early as 1.9.1. Exact version for the change is unknown but we
+        # assume 1.9.0 here.
+        if self.GIT_VERSION < (1, 9, 0):
             self.assertEqual(out, ''.encode('utf-8'))
         else:
             self.assertRegexpMatches(

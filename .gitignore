@@ -3,7 +3,7 @@
 *.pyc
 *.swp
 *.tap
-.coverage*
+*.coverage*
 __pycache__
 build
 dist

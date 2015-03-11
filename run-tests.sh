@@ -17,13 +17,33 @@
 #  You should have received a copy of the GNU General Public License
 #  along with vcs-ssh.  If not, see <http://www.gnu.org/licenses/>.
 #
+module="vcs-ssh"
+rcfilename="${module}.coveragerc"
+MODULE="vcs_ssh"
+
 SOURCE="${BASH_SOURCE[0]}"
 PACKAGE_PATH=$(dirname ${SOURCE})
-COVERAGERC="${PACKAGE_PATH}/.coveragerc"
+[ -w "${PACKAGE_PATH}" ]                               \
+   && { COVERAGERC="${PACKAGE_PATH}/${rcfilename}" ; }   \
+   || [ -w "$(pwd)" ]                                  \
+       && { COVERAGE="$(pwd)/" ; }                         \
+       || { COVERAGERC="${TMP}" ; }
 
 if ! [ -f './vcs_ssh.py' -a -f './vcs-ssh' ]
 then
-    echo 'Not where I expected to be !' 1>&2
+    cat 1>&2 <<EOF
+Not where I expected to be !
+Assuming I am running on a system where vcs_ssh is installed in site- or
+dist-packages.
+Trying to retrieve the installation path of \`${MODULE}'...
+EOF
+
+    if ! python -m "${MODULE}" 2>/dev/null
+    then
+        echo
+        echo "Well I tried but \`${MODULE}' could not be loaded."
+        exit 1
+    fi
 fi
 
 if [ -n "${TRAVIS_PYTHON_VERSION}" -a "2" = "${TRAVIS_PYTHON_VERSION:0:1}" ]
