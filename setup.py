@@ -26,25 +26,25 @@ from vcs_ssh import VERSION
 _version = "{}.{}.{}".format(*VERSION)
 
 setup(name='vcs-ssh',
+      description="VCS agnostic repository sharing through SSH",
       version=_version,
       author='Nicolas CANIART',
       author_email='nicolas@caniart.net',
-      description='VCS agnostic sharing through SSH',
       url='http://www.caniart.net/devel/vcs-ssh/',
       download_url='https://github.com/cans/vcs-ssh/tarball/{}'
           .format(_version),
       py_modules=[
           'vcs_ssh',
           ],
+      # test_suite='tests',
       packages=[
           'ssh_harness',
           'ssh_harness.tests',
-          'tests',
           ],
-      package_data={
-          '': ['docs/source/*',
-               'run-tests.sh', ],
-          },
+      data_files=[
+          ('share/doc/vcs-ssh/', ['./run-tests.sh', ]),
+          ('share/doc/vcs-ssh/', ['tests/*', ]),
+          ],
       scripts=['vcs-ssh', ],
       license='GNU GPLv2.0',
       classifiers=[
