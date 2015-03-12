@@ -183,7 +183,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
     BZR_CONFIG_DIR = os.path.expanduser('~/.bazaar')
 
     @classmethod
-    def _get_program_version(cls):
+    def _get_program_versions(cls):
         rex = re.compile('(?:.*version )(?P<version>(:?\d+\.?)+)(?:.*)'
                          .encode('utf-8'))
         for vcs, v in cls.VCS.items():
@@ -216,7 +216,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             hgrc.write(_HG_CONFIG_TEMPLATE)
         cls._add_file_to_restore(hgrc)
 
-        with BackupEditAndRestore(os.path.expanduser('~/.bazaar/bazaar.conf'),
+        with BackupEditAndRestore(os.path.join(cls.BZR_CONFIG_DIR,
+                                               'bazaar.conf'),
                                   'w') as bzrrc:
             bzrrc.write(_BZR_CONFIG_TEMPLATE)
         cls._add_file_to_restore(bzrrc)
@@ -300,22 +301,6 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
 
             if cmd is not None:
                 cls._exec_and_warn_if_fails(cmd, 'Create')
-                # prc = subprocess.Popen(cmd,
-                #                        stdout=subprocess.PIPE,
-                #                        stderr=subprocess.PIPE)
-                # (out, err) = prc.communicate()
-
-                # if 0 != prc.returncode:
-                #     cls._errors['Creating repository {}'.format(name)] = \
-                #         'Command failed with status {}:\n'               \
-                #         'Error output:{}\nOutput:{}'                     \
-                #         .format(prc.returncode,
-                #                 out.decode(_ENCODING),
-                #                 err.decode(_ENCODING))
-                # else:
-                # Attempt to create a first revision and update the
-                # HAVE_*_REPOSITORY flag according to the success of the
-                # attempt.
                 setattr(cls,
                         attr_name,
                         cls.init_repository(getattr(cls, local_attr)))
@@ -324,7 +309,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
     def setUpClass(cls):
         # We want all programs output to be in 'C' locale (makes output
         # independant of the user's environment)
-        os.putenv('LANG', 'C')  # TODO: not reset on tests completion
+        os.putenv('LANG', 'C')
 
         read_only_repos = []
         read_write_repos = []
@@ -399,17 +384,20 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                 ro_repos=' '.join(read_only_repos),
                 rw_repos=' '.join(read_write_repos))
 
-        cls._update_vcs_config()
-        cls._get_program_version()
         super(VcsSshIntegrationTestCase, cls).setUpClass()
+        # Any code that is not required to run before the parent method
+        # should be run after. This check preconditions and as their name
+        # states those are *PRE*-conditions
+        cls._get_program_versions()
+        cls._update_vcs_config()
         cls._create_fixture_repositories()
 
     @classmethod
     def _preconditions(cls):
+        super(VcsSshIntegrationTestCase, cls)._preconditions()
         pc_met = cls._check_dir(os.path.join(cls.MODULE_PATH, 'tmp'))
         pc_met = cls._check_dir(cls.BZR_CONFIG_DIR)
 
-        super(VcsSshIntegrationTestCase, cls)._preconditions()
         if not pc_met:
             self._skip()
 
