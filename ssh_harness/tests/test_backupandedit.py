@@ -382,7 +382,7 @@ class BackupEditAndRestoreTestCase(TestCase):
         self.assertFalse(os.path.isfile(self._inexistant_backup_path))
         self.assertFalse(os.path.isfile(self._inexistant_path))
 
-    @skipIf(_Py34, "From 3.4 on, Python no longer supports U mode")
+    @skipIf(_Py34, "From 3.4 on, Python no longer supports the U mode")
     def test_inexistant_file_fails_when_mode_is_U(self):
         with self.assertRaises(ValueError):
             with BackupEditAndRestore(self._inexistant_path, 'U',
@@ -394,7 +394,7 @@ class BackupEditAndRestoreTestCase(TestCase):
         self.assertFalse(os.path.isfile(self._inexistant_backup_path))
         self.assertFalse(os.path.isfile(self._inexistant_path))
 
-    @skipIf(_Py34, "From 3.4, on Python no longer supports the U mode")
+    @skipIf(_Py34, "From 3.4 on, Python no longer supports the U+ mode")
     def test_inexistant_file_fails_when_mode_is_Up(self):
         with self.assertRaises(IOError):
             with BackupEditAndRestore(self._inexistant_path, 'U+',
