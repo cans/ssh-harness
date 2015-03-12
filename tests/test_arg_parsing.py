@@ -23,9 +23,9 @@ from unittest import TestCase
 from ssh_harness.contexts import IOCapture
 from vcs_ssh import parse_args, VERSION
 
-Py3 = True
-if (3, 0, 0, ) > sys.version_info:
-    Py3 = False
+Py34 = True
+if (3, 4, 0, ) > sys.version_info:
+    Py34 = False
 
 
 class VcsSshArgsParserTestCase(TestCase):
@@ -87,10 +87,12 @@ class VcsSshArgsParserTestCase(TestCase):
                            + ['--read-only', ]
                            + self._ro_dirs * 1
                            + ['-v', ])
-        if Py3:
+        if Py34: # Assuming version write on stdout since 3.4
             self.assertEqual(ioc.get_stderr(), '')
             self.assertEqual(ioc.get_stdout(), self._version)
-        else:  # Python 2 argparse writes to stderr
+        else:
+            # Python 2 argparse writes to stderr.
+            # Python 3.3.5 on travis-ci does too.
             self.assertEqual(ioc.get_stdout(), '')
             self.assertEqual(ioc.get_stderr(), self._version)
 
