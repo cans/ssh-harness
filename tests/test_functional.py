@@ -457,6 +457,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                                 stderr=subprocess.PIPE)
         (out, err) = proc.communicate()
         if 0 != proc.returncode:
+            if (3, 0, 0) <= sys.version_info:
+                err = err.decode(_ENCODING)
             warnings.warn(
                 '{} operation failed ({}):\n'
                 '{}'.format(action,
@@ -1075,11 +1077,13 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         self.assertTrue(
             os.path.isdir(
                 os.path.join(os.getcwd(), self._basename(self._RW_BZR_URL))))
-        self.assertEqual(
+        self.assertRegexpMatches(
             err,
-            ' M  content\nAll changes applied successfully.'
-            '\nremote: Warning: using Bazaar: no access control enforced!\n'
-            .encode('utf-8'))
+            re.compile(
+                '( M  content\nAll changes applied successfully.\n)?'
+                'remote: Warning: using Bazaar: no access control enforced!\n'
+                .encode('utf-8'),
+                re.S))
         self.assertRegexpMatches(
             out,
             re.compile(
@@ -1117,8 +1121,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         self.assertRegexpMatches(
             err,
             re.compile(
-                'Pushed up to revision \d.\n'
-                'remote: Warning: using Bazaar: no access control enforced!\n'
+                '(Pushed up to revision \d.\n|'
+                'remote: Warning: using Bazaar: no access control enforced!\n){2}'
                 ''.encode('utf-8'),
                 re.S))
         self.assertRegexpMatches(

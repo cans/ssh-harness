@@ -29,7 +29,7 @@ PACKAGE_PATH=$(dirname ${SOURCE})
        && { COVERAGE="$(pwd)/" ; }                         \
        || { COVERAGERC="${TMP}" ; }
 
-if ! [ -f './vcs_ssh.py' -a -f './vcs-ssh' ]
+if ! [ -f "./${MODULE}.py" -o -d "./${MODULE}" ]
 then
     cat 1>&2 <<EOF
 Not where I expected to be !
@@ -51,7 +51,13 @@ then
     pip install mercurial
 fi
 
-COVERAGE="$(which python-coverage)"
+default_coverage=python-coverage
+if [ "${1}" = "-3" ]
+then
+    default_coverage=python3-coverage
+fi
+
+COVERAGE="$(which ${default_coverage})"
 [ -z "${COVERAGE}" ] && COVERAGE="$(which coverage)"
 [ -z "${COVERAGE}" ] && {                                      \
   echo 'Cannot find the coverage command !' 1>&2 ;             \
