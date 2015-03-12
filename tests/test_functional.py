@@ -35,7 +35,7 @@ _GIT_CONFIG_TEMPLATE = '''[user]
 [color]
         ui = auto
 [push]
-        default = simple
+        default = matching
 '''
 
 _HG_CONFIG_TEMPLATE = '''[ui]
@@ -686,7 +686,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         # Git output changed over time. This change has been seen with version
         # as early as 1.9.1. Exact version for the change is unknown but we
         # assume 1.9.0 here.
-        if self.GIT_VERSION < (1, 9, 0):
+        if self.GIT_VERSION >= (1, 9, 0) and self.GIT_VERSION < (2, 0, 0):
             self.assertEqual(out, ''.encode('utf-8'))
         else:
             self.assertRegexpMatches(
@@ -805,13 +805,21 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         self._debug(out, err, client)
 
         self.assertEqual(client.returncode, 128)
-        self.assertEqual(
+        self.assertRegexpMatches(
             err,
-            'remote: \x1b[1;41mYou only have read only access to this '
-            'repository\x1b[0m: you cannot push anything into it !\n'
-            'fatal: Could not read from remote repository.\n\nPlease make sure'
-            ' you have the correct access rights\nand the repository exists.\n'
-            .encode('utf-8'))
+            re.compile(
+                'remote: \x1b\[1;41mYou only have read only access to this '
+                'repository\x1b\[0m: you cannot push anything into it !\n'
+                'fatal: .*'.encode('utf-8'),
+                re.S))
+
+        # self.assertEqual(
+        #     err,
+        #     'remote: \x1b[1;41mYou only have read only access to this '
+        #     'repository\x1b[0m: you cannot push anything into it !\n'
+        #     'fatal: Could not read from remote repository.\n\nPlease make sure'
+        #     ' you have the correct access rights\nand the repository exists.\n'
+        #     .encode('utf-8'))
         self.assertEqual(out, ''.encode('utf-8'))
 
     # -- Mercurial related tests ----------------------------------------------
