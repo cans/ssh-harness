@@ -180,6 +180,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         'BZR': ('/usr/bin/bzr', ),
         }
 
+    BZR_CONFIG_DIR = os.path.expanduser('~/.bazaar')
+
     @classmethod
     def _get_program_version(cls):
         rex = re.compile('(?:.*version )(?P<version>(:?\d+\.?)+)(?:.*)'
@@ -405,6 +407,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
     @classmethod
     def _preconditions(cls):
         pc_met = cls._check_dir(os.path.join(cls.MODULE_PATH, 'tmp'))
+        pc_met = cls._check_dir(cls.BZR_CONFIG_DIR)
 
         super(VcsSshIntegrationTestCase, cls)._preconditions()
         if not pc_met:
