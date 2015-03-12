@@ -29,6 +29,7 @@ from vcs_ssh import bzr_handle
 __all__ = [
     'BzrHandleTestCase',
     'BZR_COMMAND',
+    'BZR_BINARY',
     ]
 
 BZR_COMMAND = 'bzr serve --inet --directory=/ --allow-writes'
@@ -37,7 +38,7 @@ BZR_BINARY = '/usr/bin/bzr'
 
 @skipIf(not (os.path.isfile(BZR_BINARY)
              and os.access(BZR_BINARY, os.X_OK)),
-        'The Bazaar VCS is not installed on this system!')
+        'The Bazaar VCS is not installed on this system.')
 class BzrHandleTestCase(TestCase):
 
     def setUp(self):

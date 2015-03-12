@@ -21,12 +21,13 @@ try:
 except ImportError:
     from mock import Mock, patch
 import os
-from unittest import TestCase
+from unittest import TestCase, skipIf
 
 from ssh_harness.contexts import IOCapture
 
 from vcs_ssh import main
 from .test_bzr import BZR_COMMAND
+from .test_hg import HG_BINARY
 
 
 class MainTestCase(TestCase):
@@ -108,6 +109,8 @@ class MainTestCase(TestCase):
             [],
             [])
 
+    @skipIf(not (os.path.isfile(HG_BINARY) and os.access(HG_BINARY, os.X_OK)),
+            'The Mercurial VCS is not installed on this system')
     def test_main_with_hg_valid_command_but_unknown_repo(self):
         os.environ['SSH_ORIGINAL_COMMAND'] = self._hg_cmd
 

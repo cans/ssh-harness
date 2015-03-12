@@ -21,11 +21,22 @@ try:
 except:
     from mock import patch
 import os
-from unittest import TestCase
+from unittest import TestCase, skipIf
 
 from vcs_ssh import hg_handle
 
 
+__all__ = [
+    'HgHandleTestCase',
+    'HG_BINARY',
+    ]
+
+
+HG_BINARY = '/usr/bin/hg'
+
+
+@skipIf(not (os.path.isfile(HG_BINARY) and os.access(HG_BINARY, os.X_OK)),
+        'The Mercurial VCS is not installed on this system.')
 class HgHandleTestCase(TestCase):
 
     def setUp(self):

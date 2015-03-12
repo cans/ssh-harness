@@ -22,15 +22,25 @@ except:
     from mock import patch
 import os
 import re
-from unittest import TestCase
+from unittest import TestCase, skipIf
 
 from ssh_harness.contexts import IOCapture
 from vcs_ssh import git_handle
 
+
+__all__ = [
+    'GitHandleTestCase',
+    'GIT_BINARY',
+    ]
+
+
+GIT_BINARY = '/usr/bin/git'
 VCS_SSH_MESSAGE = 'remote: \x1b[1;41mYou only have read only access to this ' \
     'repository\x1b[0m: you cannot push anything into it !\n'
 
 
+@skipIf(not (os.path.isfile(GIT_BINARY) and os.access(GIT_BINARY, os.X_OK)),
+        'The Git VCS is not installed on this system.')
 class GitHandleTestCase(TestCase):
 
     _ILLEGAL_REPOSITORY_RE = re.compile('Illegal repository "/.*/WRONG"\n',
