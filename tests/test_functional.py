@@ -42,6 +42,10 @@ _HG_CONFIG_TEMPLATE = '''[ui]
 username = Test User <test@example.com>
 '''
 
+_BZR_CONFIG_TEMPLATE = '''[DEFAULT]
+email = John Doe <jdoe@example.com>
+'''
+
 MODULE_PATH = os.path.abspath(os.path.dirname(__file__))
 PACKAGE_PATH = os.path.dirname(MODULE_PATH)
 TEMP_PATH = os.path.join(MODULE_PATH, 'tmp')
@@ -200,7 +204,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
 
     @classmethod
     def _update_vcs_config(cls):
-        global _GIT_CONFIG_TEMPLATE, _HG_CONFIG_TEMPLATE
+        global _GIT_CONFIG_TEMPLATE, _HG_CONFIG_TEMPLATE, _BZR_CONFIG_TEMPLATE
         with BackupEditAndRestore(os.path.expanduser('~/.gitconfig'),
                                   'w') as gitconfig:
             gitconfig.write(_GIT_CONFIG_TEMPLATE)
@@ -209,6 +213,11 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         with BackupEditAndRestore(os.path.expanduser('~/.hgrc'), 'w') as hgrc:
             hgrc.write(_HG_CONFIG_TEMPLATE)
         cls._add_file_to_restore(hgrc)
+
+        with BackupEditAndRestore(os.path.expanduser('~/.bazaar/bazaar.conf'),
+                                  'w') as bzrrc:
+            bzrrc.write(_BZR_CONFIG_TEMPLATE)
+        cls._add_file_to_restore(bzrrc)
 
     @classmethod
     def init_repository(cls, url):
