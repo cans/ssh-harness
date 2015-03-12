@@ -11,3 +11,5 @@ install:
   - pip install mock
 script:
   - ./run-tests.sh
+after_success:
+- coveralls

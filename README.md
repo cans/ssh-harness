@@ -1,6 +1,9 @@
 VCS-SSH:  VCS agnostic repository sharing through SSH
 =====================================================
 
+[![Build Status](https://travis-ci.org/cans/vcs-ssh.svg?branch=master)](https://travis-ci.org/cans/vcs-ssh)
+[![Coverage Status](https://coveralls.io/repos/cans/vcs-ssh/badge.svg)](https://coveralls.io/r/cans/vcs-ssh)
+
 Some people have very strong feelings about which version control
 system (vcs) is best, and which is *evil*. Understand which you should
 use and which you should not. The approach of vcs-ssh is more
