@@ -1135,9 +1135,6 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
 
     def test_ssh_connection_with_command_is_rejected(self):
         # Have to make a remote clone or the push would be local (slow i know).
-        self._make_a_revision(self._RW_GIT_URL)
-
-        self._enter_working_copy(self._RW_GIT_URL)
         client = subprocess.Popen([
             'ssh',
             '-T',
@@ -1150,7 +1147,6 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE)
         out, err = client.communicate(input='exit 0'.encode('utf-8'))
-        self._leave_working_copy()
 
         self._debug(out, err, client)
 
@@ -1160,10 +1156,6 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         self.assertEqual(out, ''.encode('utf-8'))
 
     def test_ssh_connection_without_command_is_rejected(self):
-        # Have to make a remote clone or the push would be local (slow i know).
-        self._make_a_revision(self._RW_GIT_URL)
-
-        self._enter_working_copy(self._RW_GIT_URL)
         client = subprocess.Popen([
             'ssh',
             '-T',
@@ -1175,7 +1167,6 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE)
         out, err = client.communicate(input='exit 0'.encode('utf-8'))
-        self._leave_working_copy()
 
         self._debug(out, err, client)
 
