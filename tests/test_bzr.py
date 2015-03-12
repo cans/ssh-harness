@@ -16,12 +16,14 @@
 #  You should have received a copy of the GNU General Public License
 #  along with vcs-ssh.  If not, see <http://www.gnu.org/licenses/>.
 #
+import os
 try:
     from unittest.mock import patch
 except:
     from mock import patch
-from unittest import TestCase
+from unittest import TestCase, skipIf
 
+import vcs_ssh
 from vcs_ssh import bzr_handle
 
 __all__ = [
@@ -30,8 +32,12 @@ __all__ = [
     ]
 
 BZR_COMMAND = 'bzr serve --inet --directory=/ --allow-writes'
+BZR_BINARY = '/usr/bin/bzr'
 
 
+@skipIf(not (os.path.isfile(BZR_BINARY)
+             and os.access(BZR_BINARY, os.X_OK)),
+        'The Bazaar VCS is not installed on this system!')
 class BzrHandleTestCase(TestCase):
 
     def setUp(self):
