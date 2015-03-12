@@ -525,11 +525,12 @@ UsePAM yes
             '/usr/sbin/sshd', '-D', '-4', '-f', cls.SSHD_CONFIG_PATH])
 
         # This is silly, but simple enough and works apparently
-        rounds = 0
-        while not os.path.isfile(cls.SSHD_PIDFILE_PATH) and 5 > rounds:
-            time.sleep(1)
-            rounds += 1
-        if rounds >= 5:
+        for round in range(0, 6):
+            if not os.path.isfile(cls.SSHD_PIDFILE_PATH):
+                time.sleep(1)
+            else:
+                break
+        if round >= 5:
             cls._errors['ssh daemon'] = 'Not starting or crashing at startup.'
             cls._skip()
 
@@ -557,26 +558,32 @@ Host {ssh_config_host_name}
         """Updates the user's `~/.ssh/known_hosts' file to prevent being
         prompted to validate the server's host key.
         """
+        failures = []
         with BackupEditAndRestore(cls._KNOWN_HOSTS_PATH, 'a') as known_hosts:
-            keyscanner = subprocess.Popen([
-                'ssh-keyscan', '-H4', '-p', str(cls.PORT),
-                cls.BIND_ADDRESS, ],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE)
-            (out, err) = keyscanner.communicate()
+            # we need to split IPv4 and IPv6 host key discovery because ssh-keyscan
+            # fails if either fail.
+            for ip_version in ['-4', '-6', ]:
+                keyscanner = subprocess.Popen([
+                    'ssh-keyscan', '-H', ip_version, '-p', str(cls.PORT),
+                        '-t', 'dsa,rsa,ecdsa', cls.BIND_ADDRESS, ],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE)
+                (out, err) = keyscanner.communicate()
 
-            # We check the length of `out` because in case of connection
-            # failure, ssh-keyscan still exit with 0, but spits nothing.
-            if 0 != keyscanner.returncode or 0 == len(out):
-                cls._errors['_update_user_know_hosts'] = (
-                    'ssh-keyscan failed with status {}: {}\nOutput: {}'
-                    .format(keyscanner.returncode,
-                            err.decode(known_hosts.encoding or _ENCODING),
-                            out.decode(known_hosts.encoding or _ENCODING)))
-            else:
-                # Seems we got what we need, save it.
-                known_hosts.write(
-                    out.decode(known_hosts.encoding or _ENCODING))
+                # We check the length of `out` because in case of connection
+                # failure, ssh-keyscan still exit with 0, but spits nothing.
+                if 0 != keyscanner.returncode or 0 == len(out):
+                    failures.append((out, err))
+                else:
+                    # Seems we got what we need, save it.
+                    known_hosts.write(
+                        out.decode(known_hosts.encoding or _ENCODING))
+        if len(failures) == 2:  # Only report an error if both IPv4 and IPv6 scan failed
+            cls._errors['_update_user_know_hosts'] = (
+                'ssh-keyscan failed with status {}: {}\nOutput: {}'
+                .format(keyscanner.returncode,
+                        err.decode(known_hosts.encoding or _ENCODING),
+                        out.decode(known_hosts.encoding or _ENCODING)))
         cls._add_file_to_restore(known_hosts)
 
     @classmethod
