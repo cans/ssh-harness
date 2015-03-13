@@ -252,14 +252,11 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             attr_name = 'HAVE_{}_REPOSITORY'.format(basename)
             if hasattr(cls, attr_name):
                 warnings.warn('Ambiguous repository name', UserWarning)
-            setattr(cls, attr_name, True)
+            setattr(cls, attr_name, False)
 
             cmd = None
             if name.endswith('_git'):
                 if not cls.HAVE_GIT:
-                    warnings.warn(
-                        "VCS {} not installed skip creating repository: {}"
-                        .format('Mercurial', path), UserWarning)
                     continue
 
                 cmd = ['git', 'init', '--bare', '-q',
@@ -267,18 +264,12 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
 
             elif name.endswith('_hg'):
                 if not cls.HAVE_HG:
-                    warnings.warn(
-                        "VCS {} not installed skip creating repository: {}"
-                        .format('Mercurial', path), UserWarning)
                     continue
 
                 cmd = ['hg', 'init', getattr(cls, path_attr), ]
 
             elif name.endswith('_svn'):
                 if not (cls.HAVE_SVNADMIN and cls.HAVE_SVN):
-                    warnings.warn(
-                        "VCS {} not installed skip creating repository: {}"
-                        .format('Subversion', path), UserWarning)
                     continue
 
                 cmd = ['svnadmin', 'create', '--fs-type', 'fsfs',
@@ -286,9 +277,6 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
 
             elif name.endswith('_bzr'):
                 if not cls.HAVE_BZR:
-                    warnings.warn(
-                        "VCS {} not installed skip creating repository: {}"
-                        .format('Bazaar', path), UserWarning)
                     continue
 
                 cmd = ['bzr', 'init', '--no-tree', getattr(cls, path_attr), ]
@@ -314,20 +302,11 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         read_only_repos = []
         read_write_repos = []
 
-        # Some preconditions:
-        cls.HAVE_BZR = cls._check_auxiliary_program('/usr/bin/bzr',
-                                                    error=False)
-        cls.HAVE_HG = cls._check_auxiliary_program('/usr/bin/hg', error=False)
-        cls.HAVE_GIT = cls._check_auxiliary_program('/usr/bin/git',
-                                                    error=False)
-        cls.HAVE_SVN = cls._check_auxiliary_program('/usr/bin/svn',
-                                                    error=False)
-        cls.HAVE_SVNADMIN = cls._check_auxiliary_program('/usr/bin/svnadmin',
-                                                         error=False)
-
         # Use this to keep track of commits.
         cls._COMMIT = 0
 
+        # Computes repositories paths required to set the
+        # AUTHORIZED_KEY_OPTIONS member below.
         for name, path in cls._REPOSITORIES.items():
             upper_name = name.upper()
             path_attr = '_{}_PATH'.format(upper_name)
@@ -347,7 +326,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
 
             setattr(cls, path_attr, os.path.join(MODULE_PATH, path))
             if cls.UPDATE_SSH_CONFIG is False:
-                # Forces us of address + port syntax
+                # Forces use of address + port syntax
                 setattr(cls, url_attr,
                         '{scheme}://{address}:{port}{path}'.format(
                             path=double_slash(getattr(cls, path_attr), name),
@@ -376,6 +355,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                 warnings.warn(UserWarning, "...")
                 pass
 
+        # Set or update parent class attributes
         cls.AUTHORIZED_KEY_OPTIONS = (
             'command="{basedir}/vcs-ssh '
             '--read-write {rw_repos} '
@@ -387,7 +367,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         super(VcsSshIntegrationTestCase, cls).setUpClass()
         # Any code that is not required to run before the parent method
         # should be run after. This check preconditions and as their name
-        # states those are *PRE*-conditions
+        # state those are *PRE*-conditions
         cls._get_program_versions()
         cls._update_vcs_config()
         cls._create_fixture_repositories()
@@ -397,6 +377,18 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         super(VcsSshIntegrationTestCase, cls)._preconditions()
         pc_met = cls._check_dir(os.path.join(cls.MODULE_PATH, 'tmp'))
         pc_met = cls._check_dir(cls.BZR_CONFIG_DIR)
+
+        # Soft preconditions: they don't fail the test suite, but will
+        # condition the execution of some tests.
+        cls.HAVE_BZR = cls._check_auxiliary_program('/usr/bin/bzr',
+                                                    error=False)
+        cls.HAVE_HG = cls._check_auxiliary_program('/usr/bin/hg', error=False)
+        cls.HAVE_GIT = cls._check_auxiliary_program('/usr/bin/git',
+                                                    error=False)
+        cls.HAVE_SVN = cls._check_auxiliary_program('/usr/bin/svn',
+                                                    error=False)
+        cls.HAVE_SVNADMIN = cls._check_auxiliary_program('/usr/bin/svnadmin',
+                                                         error=False)
 
         if not pc_met:
             self._skip()
@@ -477,7 +469,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
     @classmethod
     def _basename(cls, url):
         if not isinstance(cls, type):
-            if getattr(cls, '_repo_basename', None) is None:
+            # Cheat to make the method also work on instances.
+            if not hasattr(cls, '_repo_basename'):
                 setattr(cls, '_repo_basename', cls._do_basename(url))
             return getattr(cls, '_repo_basename')
         return cls._do_basename(url)
@@ -621,6 +614,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             stderr=subprocess.PIPE)
         out, err = client.communicate()
 
+        self.assertEqual('', out.decode('utf-8'))
+        self.assertEqual("Cloning into 'git-ro'...\n", err.decode('utf-8'))
         self.assertEqual(client.returncode, 0)
 
     def test_git_clone_from_read_write_repo(self):
