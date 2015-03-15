@@ -63,6 +63,8 @@ class PubKeyTestCase(PubKeyAuthSshClientTestCase):
             input='ls -1 {}\nexit 0'.format(self.FIXTURE_PATH).encode('utf-8'))
         out = out.strip().split('\n'.encode('utf-8'))
 
+        self._debug(out, err, client)
+
         self.assertEqual(err, expected_err)
 
         self.assertTrue(len(out) >= len(expected_out))

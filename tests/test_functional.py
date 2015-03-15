@@ -51,54 +51,11 @@ PACKAGE_PATH = os.path.dirname(MODULE_PATH)
 TEMP_PATH = os.path.join(MODULE_PATH, 'tmp')
 _ENCODING = getpreferredencoding(do_setlocale=False)
 
-# BEGIN TO BE REMOVED
-
-# Deal with the varying expectation of the methods of the various
-# StringIO implementations. Used as follows, they can accept str arguments
-# both under Python 2 and Python 3 (Py2 io.String only accepts unicode args).
-if (3, 0, 0, ) > sys.version_info:
-    from StringIO import StringIO
-else:
-    from io import StringIO
-import string
-_EOL = u'\r\n'
-_realprintable = None
-
-
-def hexdump(buf, file=sys.stdout):
-    global _realprintable, _EOL
-    if _realprintable is None:
-        _realprintable = [x for x in string.printable if x not in '\t\n\r\v\f']
-    octets = ''
-    i = 0
-
-    if isinstance(buf, bytes):
-        # Py2/Py3 compatibility
-        buf = buf.decode('utf-8')
-
-    for i, byte in enumerate(buf):
-        if 0 == i % 16:
-            if i > 0:
-                file.write('|{}|{}'.format(octets, _EOL))
-            octets = ''
-            file.write('{:08x}  '.format(i))
-        file.write('{:02x} '.format(ord(byte)))
-        octets += '.' if byte not in _realprintable else byte
-        if 7 == i % 8:
-            file.write(' ')
-            if 15 != i % 16:
-                octets += ' '
-
-    if i > 0 and '' != octets:
-        remainder = i % 16 + 1
-        file.write(' ' * (((16 - remainder) * 3) + (2 - int(len(octets)/8))))
-        file.write('|{}|{}'.format(octets, _EOL))
-        i += 1
-    file.write(u'{:08x}{}'.format(i, _EOL))
-# END TO BE REMOVED
-
 
 def double_slash(path, name):
+    """Mercurial has a peculiar way of formating its URLs: it needs a double slash
+    inbetween the host name and the path for the path to be absolute.
+    """
     if name.endswith('_hg'):
         return '/{}'.format(path)
     return path
@@ -424,24 +381,6 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         python 2.7.8 requires that method to exists (we dont use it but...)"""
         runTest = run
 
-    def _debug(self, out, err, client):
-        if os.getenv("PYTHON_DEBUG"):
-            hexerr = StringIO()
-            hexout = StringIO()
-            hexdump(err, file=hexerr)
-            hexdump(out, file=hexout)
-
-            print("Test `{test}' ended with status {status}:\n\n"
-                  "==STDERR==\n{err}\n{hexerr}\n\n==STDOUT==\n{out}\n"
-                  "{hexout}\n"
-                  .format(
-                      test='test_git_pull_from_read_write_repo',
-                      out=out,
-                      err=err,
-                      hexout=hexout.getvalue(),
-                      hexerr=hexerr.getvalue(),
-                      status=client.returncode))
-
     @classmethod
     def _exec_and_warn_if_fails(cls, cmd, action):
         proc = subprocess.Popen(cmd,
@@ -599,11 +538,9 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
 
     def test_git_clone_from_read_only_repo(self):
         if not self.HAVE_GIT:
-            self.skipTest('Git is not available')
+            self.skipTest('Git is not available on this system.')
         if not self.HAVE_GIT_RO_REPOSITORY:
-            self.skipTest(
-                'Fixture repository creation failed (look above for '
-                'warnings).')
+            self.skipTest('Git fixture repository could not be created.')
 
         cmd = ['git', 'clone', self._RO_GIT_URL, ]
 
@@ -622,9 +559,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         if not self.HAVE_GIT:
             self.skipTest('Git is not available')
         if not self.HAVE_GIT_RW_REPOSITORY:
-            self.skipTest(
-                'Fixture repository creation failed (look above for '
-                'warnings).')
+            self.skipTest('Git fixture repository could not be created.')
 
         cmd = [
             'git',
@@ -644,9 +579,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         if not self.HAVE_GIT:
             self.skipTest('Git is not available')
         if not self.HAVE_GIT_RO_REPOSITORY:
-            self.skipTest(
-                'Fixture repository creation failed (look above for '
-                'warnings).')
+            self.skipTest('Git fixture repository could not be created.')
 
         # First we clone the repo as it is.
         self._clone(self._RO_GIT_URL)
@@ -698,9 +631,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         if not self.HAVE_GIT:
             self.skipTest('Git is not available')
         if not self.HAVE_GIT_RW_REPOSITORY:
-            self.skipTest(
-                'Fixture repository creation failed (look above for '
-                'warnings).')
+            self.skipTest('Git fixture repository could not be created.')
         # First we clone the repo as it is.
         self._clone(self._RW_GIT_URL)
 
@@ -746,9 +677,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         if not self.HAVE_GIT:
             self.skipTest('Git is not available')
         if not self.HAVE_GIT_RW_REPOSITORY:
-            self.skipTest(
-                'Fixture repository creation failed (look above for '
-                'warnings).')
+            self.skipTest('Git fixture repository could not be created.')
+
         # Have to make a remote clone or the push would be local (slow i know).
         self._make_a_revision(self._RW_GIT_URL)
 
@@ -781,9 +711,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         if not self.HAVE_GIT:
             self.skipTest('Git is not available')
         if not self.HAVE_GIT_RO_REPOSITORY:
-            self.skipTest(
-                'Fixture repository creation failed (look above for '
-                'warnings).')
+            self.skipTest('Git fixture repository could not be created.')
 
         # Have to make a remote clone or the push would be local (slow i know).
         self._make_a_revision(self._RO_GIT_URL)
@@ -809,21 +737,15 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                 'repository\x1b\[0m: you cannot push anything into it !\n'
                 'fatal: .*'.encode('utf-8'),
                 re.S))
-
-        # self.assertEqual(
-        #     err,
-        #     'remote: \x1b[1;41mYou only have read only access to this '
-        #     'repository\x1b[0m: you cannot push anything into it !\n'
-        #     'fatal: Could not read from remote repository.\n\nPlease make sure'
-        #     ' you have the correct access rights\nand the repository exists.\n'
-        #     .encode('utf-8'))
         self.assertEqual(out, ''.encode('utf-8'))
 
     # -- Mercurial related tests ----------------------------------------------
 
     def test_hg_clone_from_ro_repository(self):
         if not self.HAVE_HG:
-            self.skipTest('Mercurial is not available')
+            self.skipTest('Mercurial is not available on this system.')
+        if not self.HAVE_HG_RO_REPOSITORY:
+            self.skipTest('Mercurial fixture repository could not be created.')
         cmd = ['hg', 'clone', self._RO_HG_URL, ]
 
         client = subprocess.Popen(
@@ -842,7 +764,9 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
 
     def test_hg_clone_from_rw_repository(self):
         if not self.HAVE_HG:
-            self.skipTest('Mercurial is not available')
+            self.skipTest('Mercurial is not available on this system.')
+        if not self.HAVE_HG_RW_REPOSITORY:
+            self.skipTest('Mercurial fixture repository could not be created.')
         cmd = ['hg', 'clone', self._RW_HG_URL, ]
 
         client = subprocess.Popen(
@@ -861,7 +785,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
 
     def test_hg_clone_from_wrong_repository(self):
         if not self.HAVE_HG:
-            self.skipTest('Mercurial is not available')
+            self.skipTest('Mercurial is not available on this system.')
         url = '{}-rubbish'.format(self._RW_HG_URL)
         local = '{}-rubbish'.format(self._RW_HG_PATH)
         cmd = ['hg', 'clone', url, ]
@@ -887,11 +811,9 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
 
     def test_hg_pull_from_ro_repository(self):
         if not self.HAVE_HG:
-            self.skipTest('Mercurial is not available')
+            self.skipTest('Mercurial is not available on this system.')
         if not self.HAVE_HG_RO_REPOSITORY:
-            self.skipTest(
-                'Fixture repository creation failed (look above for '
-                'warnings).')
+            self.skipTest('Mercurial fixture repository could not be created.')
 
         # First we clone the repo as it is.
         self._clone(self._RO_HG_URL)
@@ -1020,11 +942,9 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
 
     def test_bzr_branch_from_repository(self):
         if not self.HAVE_BZR:
-            self.skipTest('Bazaar is not available')
+            self.skipTest('Bazaar is not available on this system.')
         if not self.HAVE_BZR_RW_REPOSITORY:
-            self.skipTest(
-                'Fixture repository creation failed (look above for '
-                'warnings).')
+            self.skipTest('Bazaar fixture repository could not be created.')
 
         cmd = ['bzr', 'branch', self._RW_BZR_URL, ]
 
@@ -1044,11 +964,9 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
 
     def test_bzr_pull_from_repository(self):
         if not self.HAVE_BZR:
-            self.skipTest('Bazaar is not available')
+            self.skipTest('Bazaar is not available on this system.')
         if not self.HAVE_BZR_RW_REPOSITORY:
-            self.skipTest(
-                'Fixture repository creation failed (look above for '
-                'warnings).')
+            self.skipTest('Bazaar fixture repository could not be created.')
 
         self._clone(self._RW_BZR_URL)
         cmd = ['bzr', 'pull', self._RW_BZR_URL, ]
@@ -1088,11 +1006,9 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
 
     def test_bzr_send_to_repository(self):
         if not self.HAVE_BZR:
-            self.skipTest('Bazaar is not available')
+            self.skipTest('Bazaar is not available on this system.')
         if not self.HAVE_BZR_RW_REPOSITORY:
-            self.skipTest(
-                'Fixture repository creation failed (look above for '
-                'warnings).')
+            self.skipTest('Bazaar fixture repository could not be created.')
 
         self._clone(self._RW_BZR_URL)
         cmd = ['bzr', 'push', self._RW_BZR_URL, ]

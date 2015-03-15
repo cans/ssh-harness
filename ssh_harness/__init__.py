@@ -21,6 +21,7 @@ from unittest import TestCase, SkipTest
 import os
 import stat
 import subprocess
+import sys
 import traceback
 import time
 import pwd
@@ -35,6 +36,53 @@ __ALL__ = [
     ]
 
 _ENCODING = getpreferredencoding(do_setlocale=False)
+
+
+# BEGIN TO BE REMOVED
+
+# Deal with the varying expectation of the methods of the various
+# StringIO implementations. Used as follows, they can accept str arguments
+# both under Python 2 and Python 3 (Py2 io.String only accepts unicode args).
+if (3, 0, 0, ) > sys.version_info:
+    from StringIO import StringIO
+else:
+    from io import StringIO
+import string
+_EOL = u'\r\n'
+_realprintable = None
+
+
+def hexdump(buf, file=sys.stdout):
+    global _realprintable, _EOL
+    if _realprintable is None:
+        _realprintable = [x for x in string.printable if x not in '\t\n\r\v\f']
+    octets = ''
+    i = 0
+
+    if isinstance(buf, bytes):
+        # Py2/Py3 compatibility
+        buf = buf.decode('utf-8')
+
+    for i, byte in enumerate(buf):
+        if 0 == i % 16:
+            if i > 0:
+                file.write('|{}|{}'.format(octets, _EOL))
+            octets = ''
+            file.write('{:08x}  '.format(i))
+        file.write('{:02x} '.format(ord(byte)))
+        octets += '.' if byte not in _realprintable else byte
+        if 7 == i % 8:
+            file.write(' ')
+            if 15 != i % 16:
+                octets += ' '
+
+    if i > 0 and '' != octets:
+        remainder = i % 16 + 1
+        file.write(' ' * (((16 - remainder) * 3) + (2 - int(len(octets)/8))))
+        file.write('|{}|{}'.format(octets, _EOL))
+        i += 1
+    file.write(u'{:08x}{}'.format(i, _EOL))
+# END TO BE REMOVED
 
 
 class BaseSshClientTestCase(TestCase):
@@ -648,6 +696,24 @@ Host {ssh_config_host_name}
         pc_met = cls._check_auxiliary_program(cls.SSH_KEYGEN_BIN) and pc_met
         if not pc_met:
             cls._skip()
+
+    def _debug(self, out, err, client):
+        if os.getenv("PYTHON_DEBUG"):
+            hexerr = StringIO()
+            hexout = StringIO()
+            hexdump(err, file=hexerr)
+            hexdump(out, file=hexout)
+
+            print("Test `{test}' ended with status {status}:\n\n"
+                  "==STDERR==\n{err}\n{hexerr}\n\n==STDOUT==\n{out}\n"
+                  "{hexout}\n"
+                  .format(
+                      test='test_git_pull_from_read_write_repo',
+                      out=out,
+                      err=err,
+                      hexout=hexout.getvalue(),
+                      hexerr=hexerr.getvalue(),
+                      status=client.returncode))
 
     @classmethod
     def setUpClass(cls):
