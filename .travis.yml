@@ -9,6 +9,7 @@ before_install:
 install:
   - pip install coverage
   - pip install mock
+  - pip install coveralls
 script:
   - ./run-tests.sh
 after_success:

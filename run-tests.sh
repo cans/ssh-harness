@@ -74,6 +74,10 @@ append = True
 source = ${PACKAGE_PATH}/vcs-ssh,${PACKAGE_PATH}/vcs_ssh.py
 parallel = True
 data_file = ${PACKAGE_PATH}/.coverage
+fail_under = 95
+
+[report]
+fail_under = 95
 
 [path]
 sources=
@@ -84,8 +88,10 @@ EOF
 
 
 "${COVERAGE}" run -a -p -m --rcfile "${COVERAGERC}" tests
+"${COVERAGE}" combine --rcfile "${COVERAGERC}"
+"${COVERAGE}" report --rcfile "${COVERAGERC}" --fail-under 95
 status="$?"
-"${COVERAGE}" combine
-"${COVERAGE}" report
 
+[ "x0" = "x${status}" ] && outcome="\033[1;32mSuccess\033[0m" || output="\033[1;31mFailure\033[0m"
+echo "Overall outcome: ${outcome}"
 exit ${status}
