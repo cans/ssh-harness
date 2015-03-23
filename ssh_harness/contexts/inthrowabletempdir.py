@@ -19,6 +19,7 @@
 import os
 import shutil
 from tempfile import mkdtemp
+import warnings
 
 
 class InThrowableTempDir(object):
@@ -29,9 +30,11 @@ class InThrowableTempDir(object):
     """
 
     def __init__(self, suffix='', prefix='throw-', dir=None):
-        if not os.path.isdir(dir):
+        if dir is not None and not os.path.isdir(dir):
+            # mkdtemp fails with OSError if :param:`dir` does not exists.
+
             # Py3 uses 0o700 for octal not plain 0700 (where the fuck did
-            # that come from!)
+            # that come from!) So we use plain decimal encoding for mode.
             os.makedirs(dir, mode=448)
 
         # to make sure mkdtemp returns an absolute path which it may not
