@@ -4,14 +4,24 @@
 #
 from __future__ import print_function
 from unittest import TestCase, skipIf
+try:
+    from unittest.mock import patch
+except ImportError:
+    from mock import patch
 import stat
 import os
-from sys import version_info as VERSION_INFO
+from sys import version_info as VERSION_INFO, platform
 
 from ssh_harness import BackupEditAndRestore
+from ssh_harness.contexts.backupeditandrestore import _move
 
 _Py3 = (3, ) <= VERSION_INFO
 _Py34 = (3, 4) <= VERSION_INFO
+
+
+def fake_rename(patcher):
+    patcher.stop()
+    raise OSError()
 
 
 class BackupEditAndRestoreTestCase(TestCase):
@@ -431,6 +441,48 @@ class BackupEditAndRestoreTestCase(TestCase):
         self.assertFalse(os.path.isfile(self._existing_backup_path))
         # self._existing_path still exists
         self.assertTrue(os.path.isfile(self._existing_path))
+
+    def test_recursive_use_is_forbiden(self):
+        with self.assertRaises(RuntimeError):
+            with BackupEditAndRestore(self._existing_path, 'a') as f:
+                with f:
+                    pass
+
+    def test_reuse_is_forbidden(self):
+        with BackupEditAndRestore(self._existing_path, 'a') as f:
+            pass
+
+        with self.assertRaises(RuntimeError):
+            with f:
+                pass
+
+    @skipIf('Windows' != platform, 'Test only relevant on Windows OS')
+    def test_move_auxiliary_win32(self):
+        pass
+
+    @skipIf('Windows' == platform, 'Test only relevant on non-Windows OS')
+    def test_move_auxiliary_other(self):
+        some_path = os.path.join(self.FIXTURE_PATH, 'some_path')
+        with open(some_path, 'w') as f:
+            f.write("some content")
+
+        other_path = os.path.join(self.FIXTURE_PATH, 'other_path')
+        other_content = "other content"
+        with open(other_path, 'w') as f:
+            f.write(other_content)
+
+        patcher = patch('ssh_harness.contexts.backupeditandrestore.os.rename',
+                        side_effect=lambda src, dst: fake_rename(patcher))
+        patcher.start()
+        with BackupEditAndRestore(self._existing_path, 'a') as f:
+            _move(other_path, some_path)
+
+        with open(some_path, 'r') as f:
+            content = f.read()
+
+        self.assertFalse(os.path.exists(other_path))
+        self.assertTrue(os.path.exists(some_path))
+        self.assertEqual(content, other_content)
 
 
 # vim: syntax=python:sws=4:sw=4:et:

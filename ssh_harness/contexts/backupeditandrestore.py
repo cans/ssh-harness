@@ -25,6 +25,17 @@ __all__ = [
     ]
 
 
+def _move(src, dst):
+    """Wrapper around :py:func:`os.rename` that handles some issues on
+    platform which do not have an atomic rename."""
+    try:
+        os.rename(src, dst)
+    except OSError:
+        # For windows.
+        os.remove(dst)
+        os.rename(src, dst)
+
+
 class BackupEditAndRestore(object):
     """Open a file for edition but creates a backup copy first.
 
@@ -56,19 +67,6 @@ class BackupEditAndRestore(object):
     """
 
     _SUFFIX = 'backup'
-
-    def _move(self, src, dst):
-        """Wrapper around :py:func:`os.rename` that handles some issues on
-        platform which do not have an atomic rename."""
-        try:
-            os.rename(src, dst)
-        except OSError:
-            try:
-                # For windows.
-                os.remove(dst)
-                os.rename(src, dst)
-            except OSError:
-                pass
 
     def __init__(self, path, mode='a', suffix=None, **kwargs):
         check_mode = (mode * 1).replace('U', 'r').replace('rr', 'r')
@@ -124,7 +122,7 @@ class BackupEditAndRestore(object):
         # res = super(BackupEditAndRestore, self).__exit__(*args)
 
         # Replace the original file with the one that has been edited.
-        self._move(self._new_path, self._path)
+        _move(self._new_path, self._path)
         return res
 
     def restore(self):
@@ -138,7 +136,7 @@ class BackupEditAndRestore(object):
         self._restored = True
 
         if self._have_backup is True:
-            self._move(self._backup_path, self._path)
+            _move(self._backup_path, self._path)
         else:
             os.unlink(self._path)
 
