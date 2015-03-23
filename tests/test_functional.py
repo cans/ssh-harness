@@ -123,6 +123,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         'COVERAGE_PROCESS_START': os.path.join(PACKAGE_PATH, '.coveragerc'),
         'COVERAGE_FILE': os.path.join(PACKAGE_PATH, '.coverage'),
         'PYTHONPATH': PACKAGE_PATH,
+        'PYTHON_DEBUG': '1',
+        'VCS_SSH_DEBUG': '1',
         # 'COVERAGE_OPTIONS': '--source={} -p '.format(
         #     ','.join([
         #         os.path.join(PACKAGE_PATH, 'vcs-ssh'),
@@ -208,7 +210,9 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                 getattr(cls, local_attr)).upper().replace('-', '_')
             attr_name = 'HAVE_{}_REPOSITORY'.format(basename)
             if hasattr(cls, attr_name):
-                warnings.warn('Ambiguous repository name', UserWarning)
+                warnings.warn(_("Ambiguous repository name: attribute `{}' "
+                                "already set!").format(attr_name),
+                              UserWarning)
             setattr(cls, attr_name, False)
 
             cmd = None
@@ -245,7 +249,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                 pass
 
             if cmd is not None:
-                cls._exec_and_warn_if_fails(cmd, 'Create')
+                cls.runCommandWarnIfFails(cmd, 'Create')
                 setattr(cls,
                         attr_name,
                         cls.init_repository(getattr(cls, local_attr)))
@@ -382,23 +386,6 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         runTest = run
 
     @classmethod
-    def _exec_and_warn_if_fails(cls, cmd, action):
-        proc = subprocess.Popen(cmd,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE)
-        (out, err) = proc.communicate()
-        if 0 != proc.returncode:
-            if (3, 0, 0) <= sys.version_info:
-                err = err.decode(_ENCODING)
-            warnings.warn(
-                '{} operation failed ({}):\n'
-                '{}'.format(action,
-                            proc.returncode,
-                            err.encode(_ENCODING)),
-                UserWarning)
-        return proc.returncode
-
-    @classmethod
     def _do_basename(cls, url):
         basename = os.path.basename(url)
         if basename.endswith('.git'):
@@ -429,7 +416,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         else:
             return 1
 
-        return self._exec_and_warn_if_fails(cmd, 'Checkout/Clone')
+        return self.runCommandWarnIfFails(cmd, 'Checkout/Clone')
 
     def _enter_working_copy(self, url, path=None):
         if path is None:
@@ -455,7 +442,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             cmd = ['bzr', 'add', 'content', ]
         else:
             return 1
-        return self._exec_and_warn_if_fails(cmd, 'Add')
+        return self.runCommandWarnIfFails(cmd, 'Add')
 
     def _do_content(self):
         if os.path.isfile('./content') is False:
@@ -480,7 +467,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             cmd = ['bzr', 'commit', '-m', msg or default, ]
         else:
             return 1
-        return self._exec_and_warn_if_fails(cmd, 'Commit')
+        return self.runCommandWarnIfFails(cmd, 'Commit')
 
     def _commit(self, url, expect=None, path=None, msg=None):
         self._enter_working_copy(url, path=path)
@@ -500,7 +487,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             cmd = ['bzr', 'push', ':parent', ]
         else:
             return 1
-        return self._exec_and_warn_if_fails(cmd, 'Push')
+        return self.runCommandWarnIfFails(cmd, 'Push')
 
     def _push(self, url, path=None):
         self._enter_working_copy(url, path=path)
@@ -551,8 +538,12 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             stderr=subprocess.PIPE)
         out, err = client.communicate()
 
-        self.assertEqual('', out.decode('utf-8'))
-        self.assertEqual("Cloning into 'git-ro'...\n", err.decode('utf-8'))
+        if self.GIT_VERSION < (1, 8, 0):
+            self.assertEqual('', err.decode('utf-8'))
+            self.assertEqual("Cloning into 'git-ro'...\n", out.decode('utf-8'))
+        else:
+            self.assertEqual('', out.decode('utf-8'))
+            self.assertEqual("Cloning into 'git-ro'...\n", err.decode('utf-8'))
         self.assertEqual(client.returncode, 0)
 
     def test_git_clone_from_read_write_repo(self):
@@ -748,16 +739,15 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             self.skipTest('Mercurial fixture repository could not be created.')
         cmd = ['hg', 'clone', self._RO_HG_URL, ]
 
-        client = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
-        out, err = client.communicate()
+        # client = subprocess.Popen(
+        #     cmd,
+        #     stdin=subprocess.PIPE,
+        #     stdout=subprocess.PIPE,
+        #     stderr=subprocess.PIPE)
+        # out, err = client.communicate()
+        returncode, out, err = self.runCommand(cmd)
 
-        self._debug(out, err, client)
-
-        self.assertEqual(client.returncode, 0)
+        self.assertEqual(returncode, 0)
         self.assertTrue(
             os.path.isdir(
                 os.path.join(os.getcwd(), self._basename(self._RO_HG_URL))))
@@ -769,16 +759,9 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             self.skipTest('Mercurial fixture repository could not be created.')
         cmd = ['hg', 'clone', self._RW_HG_URL, ]
 
-        client = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
-        out, err = client.communicate()
+        returncode, out, err = self.runCommand(cmd)
 
-        self._debug(out, err, client)
-
-        self.assertEqual(client.returncode, 0)
+        self.assertEqual(returncode, 0)
         self.assertTrue(
             os.path.isdir(
                 os.path.join(os.getcwd(), self._basename(self._RW_HG_URL))))
@@ -790,24 +773,13 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         local = '{}-rubbish'.format(self._RW_HG_PATH)
         cmd = ['hg', 'clone', url, ]
 
-        client = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
-        out, err = client.communicate()
+        returncode, out, err = self.runCommand(cmd)
 
-        self._debug(out, err, client)
-
-        self.assertEqual(client.returncode, 255)
+        self.assertEqual(returncode, 255)
         self.assertEqual(
-            out,
-            'remote: Illegal repository "{}"\n'
-            .format(local)
-            .encode('utf-8'))
+            out, 'remote: Illegal repository "{}"\n'.format(local))
         self.assertEqual(err,
-                         'abort: no suitable response from remote hg!\n'
-                         .encode('utf-8'))
+                         'abort: no suitable response from remote hg!\n')
 
     def test_hg_pull_from_ro_repository(self):
         if not self.HAVE_HG:
@@ -829,18 +801,11 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         self._make_a_revision_and_push_it(self._RO_HG_LOCAL)
 
         self._enter_working_copy(self._RO_HG_URL)
-        client = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
-        out, err = client.communicate()
+        returncode, out, err = self.runCommand(cmd)
         self._leave_working_copy()
 
-        self._debug(out, err, client)
-
-        self.assertEqual(client.returncode, 0)
-        self.assertEqual(err, ''.encode('utf-8'))
+        self.assertEqual(returncode, 0)
+        self.assertEqual(err, '')
         self.assertRegexpMatches(
             out,
             re.compile(
@@ -849,7 +814,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                 'added \d+ changesets with \d+ changes to \d+ files\n'
                 '\d+ files updated, \d+ files merged, \d+ files removed, '
                 '\d+ files unresolved\n'
-                ''.format(self._RO_HG_URL).encode('utf-8'),
+                ''.format(self._RO_HG_URL),
                 re.S))
 
     def test_hg_pull_from_rw_repository(self):
@@ -875,18 +840,11 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                          0)
 
         self._enter_working_copy(self._RW_HG_URL)
-        client = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
-        out, err = client.communicate()
+        returncode, out, err = self.runCommand(cmd)
         self._leave_working_copy()
 
-        self._debug(out, err, client)
-
-        self.assertEqual(client.returncode, 0)
-        self.assertEqual(err, ''.encode('utf-8'))
+        self.assertEqual(returncode, 0)
+        self.assertEqual(err, '')
         self.assertRegexpMatches(
             out,
             re.compile(
@@ -895,7 +853,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                 'added \d+ changesets with \d+ changes to \d+ files\n'
                 '\d+ files updated, \d+ files merged, \d+ files removed, '
                 '\d+ files unresolved\n'
-                ''.format(self._RW_HG_URL).encode('utf-8'),
+                ''.format(self._RW_HG_URL),
                 re.S))
 
     def test_hg_push_to_read_only_repository(self):
@@ -909,18 +867,14 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         # Have to make a remote clone or the push would be local (slow i know).
         self._make_a_revision(self._RO_HG_URL)
 
-        self._enter_working_copy(self._RO_HG_URL)
-        client = subprocess.Popen([
+        cmd = [
             'hg',
             'push',
-            ],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
-        out, err = client.communicate()
-        self._leave_working_copy()
+            ]
 
-        self._debug(out, err, client)
+        self._enter_working_copy(self._RO_HG_URL)
+        returncode, out, err = self.runCommand(cmd)
+        self._leave_working_copy()
 
         # Note the double 'remote: ' prefix in the error line (cf. function
         # rejectpush) Not sure why it occurs but it seems out of my control
@@ -931,10 +885,9 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             'remote: remote: \x1b[1;41mYou only have read only access to this '
             'repository\x1b[0m: you cannot push anything into it !\n'
             'remote: abort: prechangegroup.hg-ssh hook failed\n'
-            .format(self._RO_HG_URL)
-            .encode('utf-8'))
-        self.assertEqual(err, ''.encode('utf-8'))
-        self.assertEqual(client.returncode, 1)
+            .format(self._RO_HG_URL))
+        self.assertEqual(err, '')
+        self.assertEqual(returncode, 1)
 
     # TODO: def test_hg_push_to_read_write_repository(self):
 
@@ -948,16 +901,9 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
 
         cmd = ['bzr', 'branch', self._RW_BZR_URL, ]
 
-        client = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
-        out, err = client.communicate()
+        returncode, out, err = self.runCommand(cmd)
 
-        self._debug(out, err, client)
-
-        self.assertEqual(client.returncode, 0)
+        self.assertEqual(returncode, 0)
         self.assertTrue(
             os.path.isdir(
                 os.path.join(os.getcwd(), self._basename(self._RW_BZR_URL))))
@@ -976,17 +922,10 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         self._make_a_revision_and_push_it(self._RW_BZR_LOCAL)
 
         self._enter_working_copy(self._RW_BZR_URL)
-        client = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
-        out, err = client.communicate()
+        returncode, out, err = self.runCommand(cmd)
         self._leave_working_copy()
 
-        self._debug(out, err, client)
-
-        self.assertEqual(client.returncode, 0)
+        self.assertEqual(returncode, 0)
         self.assertTrue(
             os.path.isdir(
                 os.path.join(os.getcwd(), self._basename(self._RW_BZR_URL))))
@@ -994,15 +933,12 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             err,
             re.compile(
                 '( M  content\nAll changes applied successfully.\n)?'
-                'remote: Warning: using Bazaar: no access control enforced!\n'
-                .encode('utf-8'),
+                'remote: Warning: using Bazaar: no access control enforced!\n',
                 re.S))
         self.assertRegexpMatches(
             out,
-            re.compile(
-                'Now on revision \d+.'
-                .format(self._RW_BZR_URL).encode('utf-8'),
-                re.S))
+            re.compile('Now on revision \d+.'.format(self._RW_BZR_URL),
+                       re.S))
 
     def test_bzr_send_to_repository(self):
         if not self.HAVE_BZR:
@@ -1015,17 +951,10 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
 
         self._enter_working_copy(self._RW_BZR_URL)
         self._do_make_a_revision()
-        client = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
-        out, err = client.communicate()
+        returncode, out, err = self.runCommand(cmd)
         self._leave_working_copy()
 
-        self._debug(out, err, client)
-
-        self.assertEqual(client.returncode, 0)
+        self.assertEqual(returncode, 0)
         self.assertTrue(
             os.path.isdir(
                 os.path.join(os.getcwd(), self._basename(self._RW_BZR_URL))))
@@ -1033,58 +962,43 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             err,
             re.compile(
                 '(Pushed up to revision \d.\n|'
-                'remote: Warning: using Bazaar: no access control enforced!\n){2}'
-                ''.encode('utf-8'),
+                'remote: Warning: using Bazaar: no access control enforced!\n)'
+                '{2}',
                 re.S))
-        self.assertRegexpMatches(
-            out,
-            re.compile(
-                ''.format(self._RW_BZR_URL).encode('utf-8'),
-                re.S))
+        self.assertEqual(out, '')
 
     # -- Basic commands validatation tests ------------------------------------
 
     def test_ssh_connection_with_command_is_rejected(self):
-        # Have to make a remote clone or the push would be local (slow i know).
-        client = subprocess.Popen([
+        cmd = [
             'ssh',
             '-T',
             '-p',
             str(self.PORT),
             self.SSH_CONFIG_HOST_NAME,
             '/bin/sh',
-            ],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
-        out, err = client.communicate(input='exit 0'.encode('utf-8'))
+            ]
 
-        self._debug(out, err, client)
+        returncode, out, err = self.runCommand(cmd, input='exit 0')
 
-        self.assertEqual(client.returncode, 255)
+        self.assertEqual(returncode, 255)
         self.assertEqual(err,
-                         'remote: Illegal command "/bin/sh"\n'.encode('utf-8'))
-        self.assertEqual(out, ''.encode('utf-8'))
+                         'remote: Illegal command "/bin/sh"\n')
+        self.assertEqual(out, '')
 
     def test_ssh_connection_without_command_is_rejected(self):
-        client = subprocess.Popen([
+        cmd = [
             'ssh',
             '-T',
             '-p',
             str(self.PORT),
             self.SSH_CONFIG_HOST_NAME,
-            ],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
-        out, err = client.communicate(input='exit 0'.encode('utf-8'))
+            ]
+        returncode, out, err = self.runCommand(cmd, input='exit 0')
 
-        self._debug(out, err, client)
-
-        self.assertEqual(client.returncode, 255)
-        self.assertEqual(err,
-                         'remote: Illegal command "?"\n'.encode('utf-8'))
-        self.assertEqual(out, ''.encode('utf-8'))
+        self.assertEqual(returncode, 255)
+        self.assertEqual(err, 'remote: Illegal command "?"\n')
+        self.assertEqual(out, '')
 
 
 # vim: syntax=python:sws=4:sw=4:et:

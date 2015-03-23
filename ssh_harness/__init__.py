@@ -18,6 +18,9 @@
 #
 from __future__ import print_function, unicode_literals
 from unittest import TestCase, SkipTest
+from gettext import lgettext as _
+import logging
+from logging.handlers import RotatingFileHandler
 import os
 import stat
 import subprocess
@@ -25,10 +28,10 @@ import sys
 import traceback
 import time
 import pwd
+import warnings
 from locale import getpreferredencoding
 
 from .contexts import BackupEditAndRestore
-
 
 __ALL__ = [
     'PubKeyAuthSshClientTestCase',
@@ -36,6 +39,17 @@ __ALL__ = [
     ]
 
 _ENCODING = getpreferredencoding(do_setlocale=False)
+
+logger = logging.getLogger('ssh-harness')
+handler = RotatingFileHandler(os.path.join(os.getcwd(),
+                                           'ssh-harness.log'),
+                              backupCount=1,
+                              delay=True)
+handler.setFormatter(
+    logging.Formatter(
+        '%(asctime)s %(name)s[%(process)s]: %(message)s'))
+logger.addHandler(handler)
+handler.doRollover()
 
 
 # BEGIN TO BE REMOVED
@@ -246,12 +260,7 @@ class BaseSshClientTestCase(TestCase):
          failures happening here are prone to messing things up. Work is needed
          to make this far more bullet proof.
 
-       - Having OpenSSH daemonizing itself makes reliably monitor that is does
-         not crash, fails to start, and such quite difficult...
-         Assuming it is a quite proven soft, we could monitor its pidfile
-         with something like iNotify...
-
-       - We good offer an option to force server restarts in between tests.
+       - We could offer an option to force server restarts in between tests.
          Not sure if it would be easy to make it relayable on a moderately
          loaded machine.
 
@@ -398,8 +407,8 @@ Banner none
 AcceptEnv LANG LC_*
 
 # Subsystem sftp /usr/lib/openssh/sftp-server
-
-UsePAM yes
+# *DO NOT* use: may prevent SSHD from opening a session.
+UsePAM no
 '''
 
     @classmethod
@@ -483,8 +492,16 @@ UsePAM yes
 
     @classmethod
     def _delete_file(cls, file):
+        logger.debug(_("Cleaning up file `{}'").format(file))
         if os.path.isfile(file) is True:
-            os.unlink(file)
+            try:
+                os.unlink(file)
+                logger.debug("File `{}' removed.".format(file))
+            except Exception as e:
+                logger.exception(e)
+        else:
+            logger.debug(_("Path `{}' does not designate a file.")
+                         .format(file))
 
     @classmethod
     def _generate_keys(cls):
@@ -534,6 +551,7 @@ UsePAM yes
     @classmethod
     def _generate_authzd_keys_file(cls):
         # Generate the authorized_key file with the newly created key in it.
+        logger.debug("Creating the user's authorized_keys file.")
         with open(cls.AUTHORIZED_KEYS_PATH, 'wt') as authzd_file:
             with open('{}.pub'.format(cls.USER_RSA_KEY_PATH), 'r') as user_key:
                 key = user_key.read()
@@ -546,13 +564,18 @@ UsePAM yes
                 else:
                     cls.AUTHORIZED_KEY_OPTIONS = env
             if cls.AUTHORIZED_KEY_OPTIONS is not None:
+                logger.debug("{} ".format(cls.AUTHORIZED_KEY_OPTIONS))
                 authzd_file.write("{} ".format(cls.AUTHORIZED_KEY_OPTIONS))
+            logger.debug("{}\n".format(key))
             authzd_file.write("{}\n".format(key))
+        logger.debug("=" * 80)
 
     @classmethod
     def _generate_sshd_config(cls, args):
         with open(cls.SSHD_CONFIG_PATH, 'wt') as f:
-            f.write(cls._SSHD_CONFIG.format(**args))
+            content = cls._SSHD_CONFIG.format(**args)
+            logger.debug(content)
+            f.write(content)
 
     @classmethod
     def _gather_config(cls):
@@ -623,35 +646,52 @@ Host {ssh_config_host_name}
 
     @classmethod
     def _update_user_known_hosts(cls):
-        """Updates the user's `~/.ssh/known_hosts' file to prevent being
+        """Updates the user's *known hosts* file to prevent being
         prompted to validate the server's host key.
+
+        .. note::
+
+            The path to this file can be configured through the classes
+            :py:attr:`BaseSshClientTestCase._KNOWN_HOSTS_PATH` attribute.
+            It defaults to `~/.ssh/known_hosts`
         """
         failures = []
         with BackupEditAndRestore(cls._KNOWN_HOSTS_PATH, 'a') as known_hosts:
-            # we need to split IPv4 and IPv6 host key discovery because ssh-keyscan
-            # fails if either fail.
+            # we need to split IPv4 and IPv6 host key discovery because
+            # :manpage:`ssh-keyscan(1)` fails if either fail.
             for ip_version in ['-4', '-6', ]:
-                keyscanner = subprocess.Popen([
+                returncode, out, err = cls.runCommand([
                     'ssh-keyscan', '-H', ip_version, '-p', str(cls.PORT),
-                        '-t', 'dsa,rsa,ecdsa', cls.BIND_ADDRESS, ],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE)
-                (out, err) = keyscanner.communicate()
+                    '-t', 'dsa,rsa,ecdsa', cls.BIND_ADDRESS, ])
+                # keyscanner = subprocess.Popen([
+                #     'ssh-keyscan', '-H', ip_version, '-p', str(cls.PORT),
+                #         '-t', 'dsa,rsa,ecdsa', cls.BIND_ADDRESS, ],
+                #     stdout=subprocess.PIPE,
+                #     stderr=subprocess.PIPE)
+                # (out, err) = keyscanner.communicate()
 
                 # We check the length of `out` because in case of connection
                 # failure, ssh-keyscan still exit with 0, but spits nothing.
-                if 0 != keyscanner.returncode or 0 == len(out):
+                if 0 != returncode or 0 == len(out):
+                    logger.debug("Failed to update {} for IPv{}:\n==stderr=="
+                                 "\n{}\n==stdout==\n{}\n=========="
+                                 .format(cls._KNOWN_HOSTS_PATH,
+                                         ip_version[1],
+                                         err,
+                                         out))
                     failures.append((out, err))
                 else:
                     # Seems we got what we need, save it.
-                    known_hosts.write(
-                        out.decode(known_hosts.encoding or _ENCODING))
-        if len(failures) == 2:  # Only report an error if both IPv4 and IPv6 scan failed
+                    logger.debug(
+                        "Appending new IPv{} host(s) public keys to {}:\n{}"
+                        .format(ip_version[1], cls._KNOWN_HOSTS_PATH, out))
+                    known_hosts.write(out)
+        # Only report an error if both IPv4 and IPv6 scan failed
+        if len(failures) == 2:
             cls._errors['_update_user_know_hosts'] = (
                 'ssh-keyscan failed with status {}: {}\nOutput: {}'
-                .format(keyscanner.returncode,
-                        err.decode(known_hosts.encoding or _ENCODING),
-                        out.decode(known_hosts.encoding or _ENCODING)))
+                .format(returncode, err, out))  # keyscanner.
+
         cls._add_file_to_restore(known_hosts)
 
     @classmethod
@@ -717,23 +757,24 @@ Host {ssh_config_host_name}
         if not pc_met:
             cls._skip()
 
-    def _debug(self, out, err, client):
+    @classmethod
+    def _debug(cls, out, err, client):
         if os.getenv("PYTHON_DEBUG"):
             hexerr = StringIO()
             hexout = StringIO()
             hexdump(err, file=hexerr)
             hexdump(out, file=hexout)
 
-            print("Test `{test}' ended with status {status}:\n\n"
-                  "==STDERR==\n{err}\n{hexerr}\n\n==STDOUT==\n{out}\n"
-                  "{hexout}\n"
-                  .format(
-                      test='test_git_pull_from_read_write_repo',
-                      out=out,
-                      err=err,
-                      hexout=hexout.getvalue(),
-                      hexerr=hexerr.getvalue(),
-                      status=client.returncode))
+            logger.debug("Test `{test}' ended with status {status}:\n\n"
+                         "==STDERR==\n{err}\n{hexerr}\n\n==STDOUT==\n{out}\n"
+                         "{hexout}\n"
+                         .format(
+                             test='test_git_pull_from_read_write_repo',
+                             out=out,
+                             err=err,
+                             hexout=hexout.getvalue(),
+                             hexerr=hexerr.getvalue(),
+                             status=client.returncode))
 
     @classmethod
     def setUpClass(cls):
@@ -742,6 +783,11 @@ Host {ssh_config_host_name}
         This functions keep thing at a high level calling a method for each
         required step.
         """
+
+        if 'SSH_HARNESS_DEBUG' in os.environ:
+            logger.setLevel(logging.DEBUG)
+        cls._logger = logger
+
         args = cls._gather_config()
         cls._preconditions()  # May raise skip
         cls._generate_sshd_config(args)
@@ -750,7 +796,6 @@ Host {ssh_config_host_name}
         cls._generate_authzd_keys_file()
         cls._generate_environment_file()
         cls._start_sshd()
-
         if cls.UPDATE_SSH_CONFIG is True:
             cls._update_ssh_config(args)
 
@@ -759,6 +804,36 @@ Host {ssh_config_host_name}
 
         if cls._errors:
             cls._skip()
+
+    @classmethod
+    def runCommand(cls, cmd, input=None):
+        if isinstance(input, str) and (3, 0, 0, ) <= sys.version_info:
+            input = input.encode('utf-8')
+        logger.debug(_("Executing command: `'{}").format(' '.join(cmd)))
+        proc = subprocess.Popen(cmd,
+                                stdin=subprocess.PIPE,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
+        (out, err) = proc.communicate(input=input)
+        if (3, 0, 0) <= sys.version_info:
+            # In Python 3.x subprocess module return bytes not string.
+            err = err.decode(_ENCODING)
+            out = out.decode(_ENCODING)
+        cls._debug(out, err, proc)
+        return proc.returncode, out, err
+
+    @classmethod
+    def runCommandWarnIfFails(cls, cmd, action, input=None):
+        retval, out, err = cls.runCommand(cmd, input=input)
+        if retval:
+            warnings.warn(
+                '{} operation failed ({:d}):\n'
+                '{}'.format(action,
+                            retval,
+                            err  # .encode(_ENCODING)
+                            ),
+                UserWarning)
+        return retval
 
     @classmethod
     def tearDownClass(cls):
@@ -772,9 +847,9 @@ Host {ssh_config_host_name}
                 continue  # sshd.pid is normally by sshd when it exits.
             cls._delete_file(file)
             if f.endswith('_KEY'):
-                # Don't forget to remove the public key as well as the
-                # private ones.
-                file = '{}.pub'.format(getattr(cls, '{}_PATH'.format(f)))
+                # Don't forget to remove the public key along with the
+                # private one.
+                file = '{}.pub'.format(file)
                 cls._delete_file(file)
 
         for backup in cls._NEED_TO_BE_RESTORED:
