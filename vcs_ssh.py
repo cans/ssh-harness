@@ -34,12 +34,17 @@ command="cd path/to/my/repositories && hg-ssh repo1 subdir/repo2"
 You can use pattern matching of your normal shell, e.g.:
 command="vcs-ssh user/thomas/* projects/{mercurial,foo}"
 """
+from __future__ import unicode_literals
 import argparse
 from functools import wraps
 import os
 import shlex
 import subprocess
+import logging
+from gettext import gettext as _
 from sys import stderr, version_info as VERSION_INFO
+logger = logging.getLogger('vcs-ssh')
+
 
 HAVE_MERCURIAL = False
 if (3, 0, 0, ) > VERSION_INFO:
@@ -94,6 +99,7 @@ def rejectpush(*args, **kwargs):
 
 
 def rejectrepo(repo):
+    logger.warning(_("Illegal repository \"{}\"\n").format(repo))
     stderr.write('Illegal repository "{}"\n'.format(repo))
     return 255
 
@@ -169,6 +175,7 @@ def hg_handle(cmdargv, rw_dirs, ro_dirs):
 
 if HAVE_MERCURIAL:
     def hg_dispatch(cmdargv):
+        logger.debug(_("Using in-process Mercurial dispatch"))
         return dispatch.dispatch(dispatch.request(cmdargv))
 else:
     # mercurial not ported to Python 3 yet (and they have no plan to do so !)
@@ -177,6 +184,7 @@ else:
 
 
 def pipe_dispatch(cmd):
+    logger.debug(_("Dispatching via a pipe."))
     serv = subprocess.Popen(cmd, shell=False)
     serv.communicate()
     return serv.returncode
@@ -190,22 +198,27 @@ def parse_args(argv):
         }
 
     parser = argparse.ArgumentParser(
-        description='Share multiple vcs repositories of different kinds on a '
-        'single user account, via ssh.',
+        description=_("Share multiple vcs repositories of different kinds on a"
+                      " single user account, via ssh."),
         add_help=True)
 
     parser.add_argument('MORE_RW_DIRS', nargs='*', metavar='DIR',
-                        help="More repository directories, accessible in r/w "
-                        "mode.", default=[])
+                        help=_("More repository directories, accessible in r/w"
+                               " mode."),
+                        default=[])
     parser.add_argument('--read-only', metavar='DIR', nargs='+',
-                        help="path to repository directories, to which grant "
-                        "read-only access", dest='RO_DIRS', default=[])
-    parser.add_argument('--read-write', metavar='DIR', dest='RW_DIRS',
-                        help="path to repository directories, to which grant "
-                        "access in r/w mode", nargs='+', default=[])
+                        help=_("path to repository directories, to which grant"
+                               " read-only access"),
+                        dest='RO_DIRS',
+                        default=[])
+    parser.add_argument('--read-write', metavar='DIR', nargs='+',
+                        help=_("path to repository directories, to which grant"
+                               " access in r/w mode"),
+                        dest='RW_DIRS',
+                        default=[])
     parser.add_argument('-v', '--version',
                         action='version',
-                        version='vcs-ssh version {}.{}.{}'.format(*VERSION))
+                        version=_("vcs-ssh version {}.{}.{}").format(*VERSION))
     # parser.add_argument('--scp-only', type=bool, default=False, metavar=None,
     #                     help='SCP read-only restricted access')
 
@@ -213,6 +226,7 @@ def parse_args(argv):
     for v in ['RW_DIRS', 'RO_DIRS', 'MORE_RW_DIRS', ]:
         key = v.lower()
         if 'M' == v[0]:
+            # Remove MORE_ we want all in those dir. in a single RW_DIRS list.
             key = key[5:]
         args[key] += [
             os.path.abspath(os.path.normpath(os.path.expanduser(path)))
@@ -226,27 +240,43 @@ def main(rw_dirs=None, ro_dirs=None):
     rw_dirs = rw_dirs or []
     ro_dirs = ro_dirs or []
 
+    logger.info(_("vcs-ssh started with command `{}' for user {}.")
+                .format(orig_cmd, os.getuid()))
+    logger.debug(_("Accessible repositories are:\n  + read-only:\n    - {}\n"
+                 "  + read-write:\n    - {}")
+                 .format('\n    - '.join(ro_dirs) or None,
+                         '\n    - '.join(rw_dirs) or None))
+
     try:
         cmdargv = shlex.split(orig_cmd)
     except ValueError as e:
+        logger.debug(_("Original command parsing failed with error: {}")
+                     .format(getattr(e, 'message', e)))
         # Python3 deprecated the message attribute on exceptions.
         return rejectcommand(orig_cmd,
                              extra=getattr(e, 'message', e))
 
     if cmdargv[:2] == ['hg', '-R'] and cmdargv[3:] == ['serve', '--stdio']:
-        return hg_handle(cmdargv, rw_dirs, ro_dirs)
+        logger.debug(_("Selected the {} handler.").format('Mercurial'))
+        result = hg_handle(cmdargv, rw_dirs, ro_dirs)
     elif (('git-receive-pack' == cmdargv[0] or 'git-upload-pack' == cmdargv[0])
           and 2 == len(cmdargv)):
-        return git_handle(cmdargv, rw_dirs, ro_dirs)
+        logger.debug(_("Selected the {} handler.").format('Git'))
+        result = git_handle(cmdargv, rw_dirs, ro_dirs)
     elif cmdargv == [
             'bzr', 'serve', '--inet', '--directory=/', '--allow-writes']:
+        logger.debug(_("Selected the {} handler.").format('Bazaar'))
         warn_no_access_control('Bazaar')
-        return bzr_handle(cmdargv, rw_dirs, ro_dirs)
+        result = bzr_handle(cmdargv, rw_dirs, ro_dirs)
     elif "svnserve -t" == orig_cmd:
+        logger.debug(_("Selected the {} handler.").format('Subversion'))
         warn_no_access_control('Subversion')
-        return pipe_dispatch(cmdargv)
+        result = pipe_dispatch(cmdargv)
     else:
-        return rejectcommand(orig_cmd)
+        logger.error(_("Could not determine a valid handler."))
+        result = rejectcommand(orig_cmd)
 
+    logger.info(_("vcs-ssh exiting with status `{}'").format(result))
+    return result
 
 # vim: syntax=python:sws=4:sw=4:et:

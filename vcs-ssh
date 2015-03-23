@@ -19,6 +19,26 @@
 #
 import os
 import sys
+import logging
+
+try:
+    from xdg import BaseDirectory
+    log_path = BaseDirectory.save_data_path('vcs-ssh')
+    log_path = os.path.join(log_path, 'vcs-ssh.log')
+
+except ImportError:
+    if 'XDG_DATA_HOME' in os.environ:
+        log_path = os.path.join(os.environ['XDG_DATA_HOME'],
+                                'vcs-ssh')
+        if not os.path.isdir(log_path):
+            os.makedirs(log_path)
+        log_path = os.path.join(log_path, 'vcs-ssh.log')
+
+finally:
+    if 'log_path' not in locals():
+        log_path = os.environ['HOME']
+        os.makedirs(log_path)
+        log_path = os.path.join(log_path, 'vcs-ssh.log')
 
 from vcs_ssh import parse_args, main
 
@@ -31,6 +51,13 @@ if '__main__' == __name__:
         except ImportError:
             pass
     args = parse_args(sys.argv[1:])
+    logger = logging.getLogger('vcs-ssh')
+    logger.addHandler(logging.FileHandler(log_path))
+    if 'VCS_SSH_DEBUG' in os.environ:
+        logger.setLevel(logging.DEBUG)
+    else:
+        logger.setLevel(logging.INFO)
+
     sys.exit(main(**args))
 
 
