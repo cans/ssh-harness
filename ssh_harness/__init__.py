@@ -16,7 +16,7 @@
 #  You should have received a copy of the GNU General Public License
 #  along with vcs-ssh.  If not, see <http://www.gnu.org/licenses/>.
 #
-from __future__ import print_function
+from __future__ import print_function, unicode_literals
 from unittest import TestCase, SkipTest
 import os
 import stat
@@ -49,40 +49,60 @@ else:
     from io import StringIO
 import string
 _EOL = u'\r\n'
-_realprintable = None
 
 
-def hexdump(buf, file=sys.stdout):
-    global _realprintable, _EOL
-    if _realprintable is None:
-        _realprintable = [x for x in string.printable if x not in '\t\n\r\v\f']
+def hexdump(buf, file=sys.stdout, encoding='utf-8'):
+    """Prints the content of a buffer as the :manpage:`hd(1)` command would.
+
+    :param buf: the bytes, string, or unicode instance to be printed.
+    :param file: a file-like object, in which write the output.
+    :param file: encoding to use, buf is not a :py:type:`bytes` and it must
+        be encoded.
+    :returns: an :py:type:`int`, the number of bytes read from buffer.
+
+    .. note::
+
+       If :param:`buf` is of type bytes then assertion::
+
+           len(buf) == hexdump(buf)
+
+       should hold whatever version of python used, otherwise it may not.
+    """
+    global _EOL
     octets = ''
     i = 0
 
-    if isinstance(buf, bytes):
-        # Py2/Py3 compatibility
-        buf = buf.decode('utf-8')
+    if not isinstance(buf, bytes):
+        # Py2/Py3 compatibility Py2 -> buf becomes unicode
+        #                       Py3 -> buf becomes str
+        buf = bytes(buf.encode(encoding))
 
+    # TODO: enumerate will not return bytes but strings of one character
+    # (each of which can be encoded by multiple bytes)
     for i, byte in enumerate(buf):
+        if not isinstance(byte, int):
+            byte = ord(byte)
+        if 0 == i % 8 and not (0 == i % 16 or i == 0):
+            file.write(' ')
+            octets += ' '
+
         if 0 == i % 16:
             if i > 0:
-                file.write('|{}|{}'.format(octets, _EOL))
+                file.write(' |{}|{}'.format(octets, _EOL))
             octets = ''
             file.write('{:08x}  '.format(i))
-        file.write('{:02x} '.format(ord(byte)))
-        octets += '.' if byte not in _realprintable else byte
-        if 7 == i % 8:
-            file.write(' ')
-            if 15 != i % 16:
-                octets += ' '
+        file.write('{:02x} '.format(byte))
+        octets += chr(byte) if 32 <= byte < 127 else '.'
 
     if i > 0 and '' != octets:
+        if 7 == i % 8:
+            file.write(' ')
         remainder = i % 16 + 1
         file.write(' ' * (((16 - remainder) * 3) + (2 - int(len(octets)/8))))
         file.write('|{}|{}'.format(octets, _EOL))
         i += 1
     file.write(u'{:08x}{}'.format(i, _EOL))
-# END TO BE REMOVED
+    return i
 
 
 class BaseSshClientTestCase(TestCase):
