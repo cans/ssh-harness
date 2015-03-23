@@ -471,9 +471,9 @@ class BackupEditAndRestoreTestCase(TestCase):
         with open(other_path, 'w') as f:
             f.write(other_content)
 
-        patcher = patch('ssh_harness.contexts.backupeditandrestore.os.rename',
-                        side_effect=lambda src, dst: fake_rename(patcher))
-        patcher.start()
+        patcher = patch('ssh_harness.contexts.backupeditandrestore.os.rename')
+        mock_rename = patcher.start()
+        mock_rename.side_effect = lambda src, dst: fake_rename(patcher)
         with BackupEditAndRestore(self._existing_path, 'a') as f:
             _move(other_path, some_path)
 

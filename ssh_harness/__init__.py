@@ -49,7 +49,8 @@ handler.setFormatter(
     logging.Formatter(
         '%(asctime)s %(name)s[%(process)s]: %(message)s'))
 logger.addHandler(handler)
-handler.doRollover()
+if os.path.exists(handler.baseFilename):
+    handler.doRollover()
 
 
 # BEGIN TO BE REMOVED
