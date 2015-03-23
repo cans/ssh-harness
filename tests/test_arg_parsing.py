@@ -87,7 +87,7 @@ class VcsSshArgsParserTestCase(TestCase):
                            + ['--read-only', ]
                            + self._ro_dirs * 1
                            + ['-v', ])
-        if Py34: # Assuming version write on stdout since 3.4
+        if Py34:  # Assuming version write on stdout since 3.4
             self.assertEqual(ioc.get_stderr(), '')
             self.assertEqual(ioc.get_stdout(), self._version)
         else:
