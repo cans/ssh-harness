@@ -25,18 +25,15 @@ except ImportError:
     from mock import patch
 import sys
 
-from mod4tests import (write_to_stderr, write_to_stdout,
-                       write_to_sys_stderr, write_to_sys_stdout, )
+from .mod4tests import (write_to_stderr, write_to_stdout,
+                        write_to_sys_stderr, write_to_sys_stdout, )
 
 from ssh_harness.contexts import IOCapture
 
 
 class IOCaptureTestCase(TestCase):
 
-    if (3, 0, 0) > sys.version_info:
-        MODULE_NAME = 'ssh_harness.tests.mod4tests'
-    else:
-        MODULE_NAME = 'mod4tests'
+    MODULE_NAME = 'ssh_harness.tests.mod4tests'
 
     def setUp(self):
         self.args = ('message,', )
