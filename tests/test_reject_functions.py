@@ -22,7 +22,7 @@ except:
     from mock import Mock, patch
 from unittest import TestCase
 
-from vcs_ssh import rejectpush, rejectcommand
+from vcs_ssh import rejectpush, rejectcommand, have_required_command
 
 
 class RejectFunctionsTestCase(TestCase):
@@ -62,6 +62,33 @@ class RejectFunctionsTestCase(TestCase):
         self.assertEqual(res, 255)
         stderrmock.write.assert_called_once_with(
             'remote: Illegal command "foo": bar\n')
+
+
+@have_required_command
+def fake_handler(command, ro_dirs, rw_dirs):
+    return 0
+
+
+class HaveRequiredCommandTestCase(TestCase):
+
+    def test_have_required_command_with_good_command(self):
+        with patch('vcs_ssh.stderr') as stderrmock:
+            res = fake_handler(['true', ],
+                               [],
+                               [])
+
+        self.assertEqual(0, res)
+
+    def test_have_required_command_with_bad_command(self):
+        with patch('vcs_ssh.stderr') as stderrmock:
+            res = fake_handler(['command_that_does_not_exist', ],
+                               [],
+                               [])
+
+        self.assertEqual(254, res)
+        stderrmock.write.assert_called_once_with(
+            'The command required to fulfill your request has not '
+            'been found on this system.')
 
 
 # vim: syntax=python:sws=4:sw=4:et:
