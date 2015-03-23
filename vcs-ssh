@@ -37,7 +37,8 @@ except ImportError:
 finally:
     if 'log_path' not in locals():
         log_path = os.environ['HOME']
-        os.makedirs(log_path)
+        if not os.path.isdir(log_path):
+            os.makedirs(log_path)
         log_path = os.path.join(log_path, 'vcs-ssh.log')
 
 from vcs_ssh import parse_args, main
