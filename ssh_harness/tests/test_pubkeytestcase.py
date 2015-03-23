@@ -34,8 +34,8 @@ class PubKeyTestCase(PubKeyAuthSshClientTestCase):
             'host_ssh_rsa_key.pub',
             'id_rsa',
             'id_rsa.pub',
-            'sshd_config',
             'sshd.pid',
+            'sshd_config',
             ]
 
         # Because Py2 and Py3 suprocess modules produce incompatible
@@ -62,6 +62,12 @@ class PubKeyTestCase(PubKeyAuthSshClientTestCase):
         out, err = client.communicate(
             input='ls -1 {}\nexit 0'.format(self.FIXTURE_PATH).encode('utf-8'))
         out = out.strip().split('\n'.encode('utf-8'))
+
+        # Sorting should not be necessary as LS(1) should sort for us, yet we
+        # have seen occurrences where the last to items were not in the right
+        # order (!) Is it a problem with the slicing applied below ?
+        # Better safe san sorry as they say ...
+        out.sort()
 
         self._debug(out, err, client)
 
