@@ -89,10 +89,23 @@ EOF
 
 
 "${COVERAGE}" run -a -p -m --rcfile "${COVERAGERC}" tests
+run_status="${?}"
 "${COVERAGE}" combine --rcfile "${COVERAGERC}"
 "${COVERAGE}" report --rcfile "${COVERAGERC}" --fail-under "${TRESHOLD}"
-status="$?"
+report_status="$?"
 
-[ "x0" = "x${status}" ] && outcome="\033[1;32mSuccess\033[0m" || outcome="\033[1;31mFailure\033[0m"
-echo -e "Overall outcome: ${outcome} (coverage below ${TRESHOLD}%)"
+if [ "x1" = "x${run_status}" ]
+then
+    outcome="\033[1;31mFailure\033[0m (some test(s) did not pass)"
+    status="${run_status}"
+else
+    status="${report_status}"
+    if [ "x0" = "x${status}" ]
+    then
+        outcome="\033[1;32mSuccess\033[0m"
+    else
+        outcome="\033[1;31mFailure\033[0m (coverage below ${TRESHOLD}%)"
+    fi
+fi
+echo -e "Overall outcome: ${outcome}"
 exit ${status}
