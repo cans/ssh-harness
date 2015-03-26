@@ -324,12 +324,11 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
 
         # Set or update parent class attributes
         cls.AUTHORIZED_KEY_OPTIONS = (
-            'command="{basedir}/vcs-ssh '
-            '--read-write {rw_repos} '
-            '--read-only {ro_repos}"').format(
-                basedir=PACKAGE_PATH,
-                ro_repos=' '.join(read_only_repos),
-                rw_repos=' '.join(read_write_repos))
+            'command="{basedir}/vcs-ssh --read-write {rw_repos} '
+            '--read-only {ro_repos}"'
+            .format(basedir=PACKAGE_PATH,
+                    ro_repos=' '.join(read_only_repos),
+                    rw_repos=' '.join(read_write_repos)))
 
         super(VcsSshIntegrationTestCase, cls).setUpClass()
         # Any code that is not required to run before the parent method
@@ -341,8 +340,9 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
 
     @classmethod
     def _preconditions(cls):
+        global TEMP_PATH
         super(VcsSshIntegrationTestCase, cls)._preconditions()
-        pc_met = cls._check_dir(os.path.join(cls.MODULE_PATH, 'tmp'))
+        pc_met = cls._check_dir(TEMP_PATH)
         pc_met = cls._check_dir(cls.BZR_CONFIG_DIR)
 
         # Soft preconditions: they don't fail the test suite, but will
