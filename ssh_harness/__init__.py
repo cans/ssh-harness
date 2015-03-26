@@ -411,6 +411,7 @@ AcceptEnv LANG LC_*
 # *DO NOT* use: may prevent SSHD from opening a session.
 UsePAM no
 '''
+    _context_name = 'ssh_harness'
 
     @classmethod
     def _skip(cls):
@@ -485,11 +486,11 @@ UsePAM no
             return False
         return True
 
-    @classmethod
-    def _add_file_to_restore(cls, file):
-        """Add a file to the list of those to be restore at the end of the
-        tests."""
-        cls._NEED_TO_BE_RESTORED.append(file)
+    # @classmethod
+    # def _add_file_to_restore(cls, file):
+    #     """Add a file to the list of those to be restore at the end of the
+    #     tests."""
+    #     cls._NEED_TO_BE_RESTORED.append(file)
 
     @classmethod
     def _delete_file(cls, file):
@@ -543,11 +544,11 @@ UsePAM no
     def _generate_environment_file(cls):
         if cls.SSH_ENVIRONMENT_FILE is False:
             return
-        with BackupEditAndRestore(cls.SSH_ENVIRONMENT_PATH, 'w+t') as f:
+        with BackupEditAndRestore(cls._context_name,
+                                  cls._SSH_ENVIRONMENT_PATH,
+                                  'w+t') as f:
             for k, v in cls.SSH_ENVIRONMENT.items():
                 print("{}={}".format(k, v), file=f)
-
-        cls._add_file_to_restore(f)
 
     @classmethod
     def _generate_authzd_keys_file(cls):
@@ -556,6 +557,7 @@ UsePAM no
         with open(cls.AUTHORIZED_KEYS_PATH, 'wt') as authzd_file:
             with open('{}.pub'.format(cls.USER_RSA_KEY_PATH), 'r') as user_key:
                 key = user_key.read()
+
             if cls.SSH_ENVIRONMENT and cls.SSH_ENVIRONMENT_FILE is False:
                 env = ','.join([
                     'environment="{}={}"'.format(*x)
@@ -636,14 +638,16 @@ UsePAM no
         if cls.UPDATE_SSH_CONFIG is False:
             return
 
-        with BackupEditAndRestore(cls._SSH_CONFIG_PATH, 'a') as user_config:
+        with BackupEditAndRestore(cls._context_name,
+                                  cls._SSH_CONFIG_PATH,
+                                  'a') as user_config:
             user_config.write('''
 Host {ssh_config_host_name}
         HostName {address}
         Port {port}
         IdentityFile {identity}
 '''.format(**args))
-        cls._add_file_to_restore(user_config)
+        # cls._add_file_to_restore(user_config)
 
     @classmethod
     def _update_user_known_hosts(cls):
@@ -657,19 +661,15 @@ Host {ssh_config_host_name}
             It defaults to `~/.ssh/known_hosts`
         """
         failures = []
-        with BackupEditAndRestore(cls._KNOWN_HOSTS_PATH, 'a') as known_hosts:
+        with BackupEditAndRestore(cls._context_name,
+                                  cls._KNOWN_HOSTS_PATH,
+                                  'a') as known_hosts:
             # we need to split IPv4 and IPv6 host key discovery because
             # :manpage:`ssh-keyscan(1)` fails if either fail.
             for ip_version in ['-4', '-6', ]:
                 returncode, out, err = cls.runCommand([
                     'ssh-keyscan', '-H', ip_version, '-p', str(cls.PORT),
                     '-t', 'dsa,rsa,ecdsa', cls.BIND_ADDRESS, ])
-                # keyscanner = subprocess.Popen([
-                #     'ssh-keyscan', '-H', ip_version, '-p', str(cls.PORT),
-                #         '-t', 'dsa,rsa,ecdsa', cls.BIND_ADDRESS, ],
-                #     stdout=subprocess.PIPE,
-                #     stderr=subprocess.PIPE)
-                # (out, err) = keyscanner.communicate()
 
                 # We check the length of `out` because in case of connection
                 # failure, ssh-keyscan still exit with 0, but spits nothing.
@@ -693,7 +693,7 @@ Host {ssh_config_host_name}
                 'ssh-keyscan failed with status {}: {}\nOutput: {}'
                 .format(returncode, err, out))  # keyscanner.
 
-        cls._add_file_to_restore(known_hosts)
+        # cls._add_file_to_restore(known_hosts)
 
     @classmethod
     def _mode2string(cls, mode):
@@ -853,8 +853,7 @@ Host {ssh_config_host_name}
                 file = '{}.pub'.format(file)
                 cls._delete_file(file)
 
-        for backup in cls._NEED_TO_BE_RESTORED:
-            backup.restore()
+        BackupEditAndRestore.clear_context(cls._context_name)
 
         # Now that we destroyed all keys we can restore the modes of the
         # directories that were along their path.

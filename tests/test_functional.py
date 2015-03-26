@@ -141,6 +141,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
 
     BZR_CONFIG_DIR = os.path.expanduser('~/.bazaar')
 
+    _context_name = 'test_functional'
+
     @classmethod
     def _get_program_versions(cls):
         rex = re.compile('(?:.*version )(?P<version>(:?\d+\.?)+)(?:.*)'
@@ -166,20 +168,24 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
     @classmethod
     def _update_vcs_config(cls):
         global _GIT_CONFIG_TEMPLATE, _HG_CONFIG_TEMPLATE, _BZR_CONFIG_TEMPLATE
-        with BackupEditAndRestore(os.path.expanduser('~/.gitconfig'),
+        with BackupEditAndRestore(cls._context_name,
+                                  os.path.expanduser('~/.gitconfig'),
                                   'w') as gitconfig:
             gitconfig.write(_GIT_CONFIG_TEMPLATE)
-        cls._add_file_to_restore(gitconfig)
+        # cls._add_file_to_restore(gitconfig)
 
-        with BackupEditAndRestore(os.path.expanduser('~/.hgrc'), 'w') as hgrc:
+        with BackupEditAndRestore(cls._context_name,
+                                  os.path.expanduser('~/.hgrc'),
+                                  'w') as hgrc:
             hgrc.write(_HG_CONFIG_TEMPLATE)
-        cls._add_file_to_restore(hgrc)
+        # cls._add_file_to_restore(hgrc)
 
-        with BackupEditAndRestore(os.path.join(cls.BZR_CONFIG_DIR,
+        with BackupEditAndRestore(cls._context_name,
+                                  os.path.join(cls.BZR_CONFIG_DIR,
                                                'bazaar.conf'),
                                   'w') as bzrrc:
             bzrrc.write(_BZR_CONFIG_TEMPLATE)
-        cls._add_file_to_restore(bzrrc)
+        # cls._add_file_to_restore(bzrrc)
 
     @classmethod
     def init_repository(cls, url):
