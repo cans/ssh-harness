@@ -4,6 +4,7 @@
 *.swp
 *.tap
 *.coverage*
+*.log
 __pycache__
 build
 dist
