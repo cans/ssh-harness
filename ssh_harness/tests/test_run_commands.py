@@ -17,22 +17,23 @@
 #  along with vcs-ssh.  If not, see <http://www.gnu.org/licenses/>.
 #
 from __future__ import unicode_literals
+from unittest import TestCase
 import warnings
 
 from ssh_harness import PubKeyAuthSshClientTestCase
 
 
-class RunCommandsTestCase(PubKeyAuthSshClientTestCase):
+class RunCommandsTestCase(TestCase):
 
     def test_run_command_success(self):
-        retval, out, err = self.__class__.runCommand(['true'])
+        retval, out, err = PubKeyAuthSshClientTestCase.runCommand(['true'])
 
         self.assertEqual(out, '')
         self.assertEqual(err, '')
         self.assertEqual(retval, 0)
 
     def test_run_command_failure(self):
-        retval, out, err = self.__class__.runCommand(['false'])
+        retval, out, err = PubKeyAuthSshClientTestCase.runCommand(['false'])
 
         self.assertEqual(out, '')
         self.assertEqual(err, '')
@@ -40,7 +41,7 @@ class RunCommandsTestCase(PubKeyAuthSshClientTestCase):
 
     def test_run_command_warn_if_fail_success(self):
         with warnings.catch_warnings(record=True) as w:
-            retval = self.__class__.runCommandWarnIfFails(
+            retval = PubKeyAuthSshClientTestCase.runCommandWarnIfFails(
                 ['true'],
                 'Success test')
 
@@ -50,7 +51,7 @@ class RunCommandsTestCase(PubKeyAuthSshClientTestCase):
     def test_run_command_warn_if_fail_failure(self):
 
         with warnings.catch_warnings(record=True) as w:
-            retval = self.__class__.runCommandWarnIfFails(
+            retval = PubKeyAuthSshClientTestCase.runCommandWarnIfFails(
                 ['false'],
                 'Failure test')
 
