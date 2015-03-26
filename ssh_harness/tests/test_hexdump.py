@@ -72,21 +72,21 @@ class HexDumpTestCase(TestCase):
         l = hexdump('', file=self.output)
 
         self.assertEqual(self.output.getvalue(),
-                         '00000000\r\n')
+                         '00000000\n')
         self.assertEqual(l, 0)
 
     def test_hexdump_on_empty_bytes(self):
         l = hexdump(b'', file=self.output)
 
         self.assertEqual(self.output.getvalue(),
-                         '00000000\r\n')
+                         '00000000\n')
         self.assertEqual(l, 0)
 
     def test_hexdump_on_empty_unicode(self):
         l = hexdump(u'', file=self.output)
 
         self.assertEqual(self.output.getvalue(),
-                         '00000000\r\n')
+                         '00000000\n')
         self.assertEqual(l, 0)
 
     def test_hexdump_on_plain_ascii_str(self):
@@ -96,10 +96,10 @@ class HexDumpTestCase(TestCase):
         self.assertEqual(
             self.output.getvalue(),
             '00000000  30 31 32 33 34 35 36 37  38 39 41 42 43 44 45 46  '
-            '|01234567 89ABCDEF|\r\n'
+            '|01234567 89ABCDEF|\n'
             '00000010  47 48 49 4a 4b 4c 4d 4e  4f 50                    '
-            '|GHIJKLMN OP|\r\n'
-            '0000001a\r\n')
+            '|GHIJKLMN OP|\n'
+            '0000001a\n')
         self.assertEqual(l, 26)
 
     def test_hexdump_on_plain_ascii_bytes(self):
@@ -109,10 +109,10 @@ class HexDumpTestCase(TestCase):
         self.assertEqual(
             self.output.getvalue(),
             '00000000  30 31 32 33 34 35 36 37  38 39 41 42 43 44 45 46  '
-            '|01234567 89ABCDEF|\r\n'
+            '|01234567 89ABCDEF|\n'
             '00000010  47 48 49 4a 4b 4c 4d 4e  4f 50                    '
-            '|GHIJKLMN OP|\r\n'
-            '0000001a\r\n')
+            '|GHIJKLMN OP|\n'
+            '0000001a\n')
         self.assertEqual(l, 26)
 
     def test_hexdump_on_plain_ascii_unicode(self):
@@ -122,10 +122,10 @@ class HexDumpTestCase(TestCase):
         self.assertEqual(
             self.output.getvalue(),
             '00000000  30 31 32 33 34 35 36 37  38 39 41 42 43 44 45 46  '
-            '|01234567 89ABCDEF|\r\n'
+            '|01234567 89ABCDEF|\n'
             '00000010  47 48 49 4a 4b 4c 4d 4e  4f 50                    '
-            '|GHIJKLMN OP|\r\n'
-            '0000001a\r\n')
+            '|GHIJKLMN OP|\n'
+            '0000001a\n')
         self.assertEqual(l, 26)
 
     def test_hexdump_on_plain_ascii_str_8_bytes(self):
@@ -141,8 +141,8 @@ class HexDumpTestCase(TestCase):
         self.assertEqual(
             self.output.getvalue(),
             '00000000  30 31 32 33 34 35 36 37                           '
-            '|01234567|\r\n'
-            '00000008\r\n')
+            '|01234567|\n'
+            '00000008\n')
         self.assertEqual(l, 8)
 
     def test_hexdump_on_plain_ascii_unicode_8_bytes(self):
@@ -158,8 +158,8 @@ class HexDumpTestCase(TestCase):
         self.assertEqual(
             self.output.getvalue(),
             '00000000  30 31 32 33 34 35 36 37                           '
-            '|01234567|\r\n'
-            '00000008\r\n')
+            '|01234567|\n'
+            '00000008\n')
         self.assertEqual(l, 8)
 
     def test_hexdump_on_plain_ascii_bytes_8_bytes(self):
@@ -175,8 +175,8 @@ class HexDumpTestCase(TestCase):
         self.assertEqual(
             self.output.getvalue(),
             '00000000  30 31 32 33 34 35 36 37                           '
-            '|01234567|\r\n'
-            '00000008\r\n')
+            '|01234567|\n'
+            '00000008\n')
         self.assertEqual(l, 8)
 
     def test_hexdump_on_plain_ascii_str_16_bytes(self):
@@ -186,8 +186,8 @@ class HexDumpTestCase(TestCase):
         self.assertEqual(
             self.output.getvalue(),
             '00000000  30 31 32 33 34 35 36 37  38 39 41 42 43 44 45 46  '
-            '|01234567 89ABCDEF|\r\n'
-            '00000010\r\n')
+            '|01234567 89ABCDEF|\n'
+            '00000010\n')
         self.assertEqual(l, 16)
 
     def test_hexdump_on_plain_ascii_bytes_16_bytes(self):
@@ -197,8 +197,8 @@ class HexDumpTestCase(TestCase):
         self.assertEqual(
             self.output.getvalue(),
             '00000000  30 31 32 33 34 35 36 37  38 39 41 42 43 44 45 46  '
-            '|01234567 89ABCDEF|\r\n'
-            '00000010\r\n')
+            '|01234567 89ABCDEF|\n'
+            '00000010\n')
         self.assertEqual(l, 16)
 
     def test_hexdump_on_plain_ascii_unicode_16_bytes(self):
@@ -211,8 +211,8 @@ class HexDumpTestCase(TestCase):
         self.assertEqual(
             self.output.getvalue(),
             '00000000  30 31 32 33 34 35 36 37  38 39 41 42 43 44 45 46  '
-            '|01234567 89ABCDEF|\r\n'
-            '00000010\r\n')
+            '|01234567 89ABCDEF|\n'
+            '00000010\n')
         self.assertEqual(l, 16)
 
     def test_hexdump_on_string_with_multibyte_chars(self):
@@ -221,8 +221,8 @@ class HexDumpTestCase(TestCase):
         self.assertEqual(
             self.output.getvalue(),
             '00000000  c3 89 c3 88 e2 82 ac 65  c3 aa c3 ab e1 ba bd    '
-            '|.......e .......|\r\n'
-            '0000000f\r\n')
+            '|.......e .......|\n'
+            '0000000f\n')
         self.assertEqual(l, 15)
 
     def test_hexdump_on_unicode_with_multibyte_chars(self):
@@ -231,8 +231,8 @@ class HexDumpTestCase(TestCase):
         self.assertEqual(
             self.output.getvalue(),
             '00000000  c3 89 c3 88 e2 82 ac 65  c3 aa c3 ab e1 ba bd    '
-            '|.......e .......|\r\n'
-            '0000000f\r\n')
+            '|.......e .......|\n'
+            '0000000f\n')
         self.assertEqual(l, 15)
 
     def test_hexdump_on_bytes_with_multibyte_chars(self):
@@ -243,6 +243,6 @@ class HexDumpTestCase(TestCase):
         self.assertEqual(
             self.output.getvalue(),
             '00000000  c3 89 c3 88 e2 82 ac 65  c3 aa c3 ab e1 ba bd    '
-            '|.......e .......|\r\n'
-            '0000000f\r\n')
+            '|.......e .......|\n'
+            '0000000f\n')
         self.assertEqual(l, 15)

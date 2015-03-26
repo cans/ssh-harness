@@ -63,7 +63,6 @@ if (3, 0, 0, ) > sys.version_info:
 else:
     from io import StringIO
 import string
-_EOL = u'\r\n'
 
 
 def hexdump(buf, file=sys.stdout, encoding='utf-8'):
@@ -103,7 +102,7 @@ def hexdump(buf, file=sys.stdout, encoding='utf-8'):
 
         if 0 == i % 16:
             if i > 0:
-                file.write(' |{}|{}'.format(octets, _EOL))
+                file.write(' |{}|\n'.format(octets))
             octets = ''
             file.write('{:08x}  '.format(i))
         file.write('{:02x} '.format(byte))
@@ -114,9 +113,9 @@ def hexdump(buf, file=sys.stdout, encoding='utf-8'):
             file.write(' ')
         remainder = i % 16 + 1
         file.write(' ' * (((16 - remainder) * 3) + (2 - int(len(octets)/8))))
-        file.write('|{}|{}'.format(octets, _EOL))
+        file.write('|{}|\n'.format(octets))
         i += 1
-    file.write(u'{:08x}{}'.format(i, _EOL))
+    file.write(u'{:08x}\n'.format(i))
     return i
 
 
