@@ -276,11 +276,12 @@ class BaseSshClientTestCase(TestCase):
     """
 
     MODULE_PATH = os.path.abspath(os.path.dirname(__file__))
-    FIXTURE_PATH = os.path.sep.join([
-        os.path.abspath(os.getcwd()), 'tests', 'fixtures', 'sshd', ])
+    FIXTURE_PATH = os.path.join(
+        os.path.abspath(os.getcwd()), 'tests', 'fixtures', 'sshd')
 
     AUTH_METHOD_PASSWORD = (True, False, )
     AUTH_METHOD_PUBKEY = (False, True, )
+    AUTH_METHOD_ANY = (True, True, )
     PORT = 2200
     BIND_ADDRESS = 'localhost'
 
@@ -342,6 +343,7 @@ class BaseSshClientTestCase(TestCase):
     _HAVE_KNOWN_HOST = None
     _HAVE_SSH_ENVIRONMENT = None
     _HAVE_KNOWN_HOSTS = None
+    _OLD_LANG = None
 
     _AUTH_METHODS = ('password_auth', 'pubkey_auth', )
     _KNOWN_HOSTS_PATH = os.path.expanduser('~/.ssh/known_hosts')
@@ -755,6 +757,8 @@ Host {ssh_config_host_name}
         This functions keep thing at a high level calling a method for each
         required step.
         """
+        cls._OLD_LANG = os.environ.get('LANG', None)
+        os.environ['LANG'] = 'C'
 
         if 'SSH_HARNESS_DEBUG' in os.environ:
             logger.setLevel(logging.DEBUG)
@@ -783,6 +787,7 @@ Host {ssh_config_host_name}
             input = input.encode('utf-8')
         logger.debug(_("Executing command: `'{}").format(' '.join(cmd)))
         proc = subprocess.Popen(cmd,
+                                env=os.environ,
                                 stdin=subprocess.PIPE,
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE)
@@ -809,14 +814,19 @@ Host {ssh_config_host_name}
 
     @classmethod
     def tearDownClass(cls):
+        if cls._OLD_LANG is not None:
+            os.environ['LANG'] = cls._OLD_LANG
         # If the server was started.
         if cls._SSHD is not None:
             cls._kill_sshd()
 
         for f in cls._FILES.keys():
-            file = getattr(cls, '{}_PATH'.format(f))
+            file = getattr(cls, '{}_PATH'.format(f), None)
+            if file is None:
+                continue  # File was not created for some reason
+
             if file.endswith('.pid'):
-                continue  # sshd.pid is normally by sshd when it exits.
+                continue  # sshd.pid is normally deleted by sshd when it exits.
             cls._delete_file(file)
             if f.endswith('_KEY'):
                 # Don't forget to remove the public key along with the
