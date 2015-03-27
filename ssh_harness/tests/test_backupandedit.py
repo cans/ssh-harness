@@ -41,10 +41,8 @@ class BackupEditAndRestoreTestCase(TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        # if os.path.isdir(cls.FIXTURE_PATH):
-        #     os.rmdir(cls.FIXTURE_PATH)
-        if not os.path.isdir(cls.TEMP_PATH):
-            os.makedirs(cls.TEMP_PATH, stat.S_IRWXU)
+        if os.path.isdir(cls.TEMP_PATH):
+            os.rmdir(cls.TEMP_PATH)
 
     def setUp(self):
         self._file_content = 'Some content for the test file'
