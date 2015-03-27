@@ -20,7 +20,7 @@
 module="vcs-ssh"
 rcfilename="${module}.coveragerc"
 MODULE="vcs_ssh"
-TRESHOLD="95"
+TRESHOLD="90"
 
 SOURCE="${BASH_SOURCE[0]}"
 PACKAGE_PATH=$(dirname ${SOURCE})
