@@ -31,6 +31,8 @@ except ImportError:
 MODULE_PATH = os.path.abspath(os.path.dirname(__file__))
 FIXTURE_PATH = os.path.sep.join([MODULE_PATH, 'fixtures', ])
 TEMP_PATH = os.path.sep.join([MODULE_PATH, 'tmp', ])
+if not os.path.isdir(TEMP_PATH):
+    os.mkdir(TEMP_PATH)
 
 sys.path.append(os.path.join(FIXTURE_PATH, 'bin'))
 import fake_ssh_keyscan
@@ -155,6 +157,7 @@ class SshHarnessCheckDirTestCase(TestCase):
 class SshHarnessSkip(SshHarnessNoop):
 
     UPDATE_SSH_CONFIG = False
+    _errors = {}
 
 
 class SshHarnessSkipTestCase(TestCase):
@@ -178,16 +181,16 @@ class SshHarnessSkipTestCase(TestCase):
 class SshHarnessSetUpClassTestCase(TestCase):
 
     def tearDown(self):
-        for k in list(SshHarness._errors.keys()):
-            del SshHarness._errors[k]
+        for k in list(SshHarnessSkip._errors.keys()):
+            del SshHarnessSkip._errors[k]
         self.assertTrue(
             SshHarness._errors is BaseSshClientTestCase._errors)
         if 'SSH_HARNESS_DEBUG' in os.environ:
             del os.environ['SSH_HARNESS_DEBUG']
 
     def test_setupclass_calls_skip(self):
-        SshHarness._errors['fictional_func1()'] = 'Some message'
-        SshHarness._errors['fictional_func2()'] = 'Some other message'
+        SshHarnessSkip._errors['fictional_func1()'] = 'Some message'
+        SshHarnessSkip._errors['fictional_func2()'] = 'Some other message'
         with self.assertRaisesRegexp(
                 SkipTest,
                 "One or more errors occurred while trying to setup the "
@@ -600,6 +603,8 @@ class DeleteFileTestCase(TestCase):
 class SshHarnessProtectPrivateKeys(SshHarness):
 
     FIXTURE_PATH = os.path.join(TEMP_PATH, 'subdir', 'subsubdir')
+    # New list, because it is mutated by the __protect_private_keys() method.
+    _NEED_CHMOD = []
 
 
 class ProtectPrivateKeysTestCase(TestCase):
