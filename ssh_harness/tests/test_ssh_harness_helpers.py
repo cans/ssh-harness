@@ -1,6 +1,6 @@
 # -*- coding: utf-8-unix; -*-
 #
-#  Copyright © 2014, Nicolas CANIART <nicolas@caniart.net>
+#  Copyright © 2015, Nicolas CANIART <nicolas@caniart.net>
 #
 #  This file is part of vcs-ssh.
 #
@@ -16,31 +16,621 @@
 #  You should have received a copy of the GNU General Public License
 #  along with vcs-ssh.  If not, see <http://www.gnu.org/licenses/>.
 #
-from __future__ import print_function
-from unittest import TestCase
+from __future__ import print_function, unicode_literals
+import os
+import stat
+import sys
+import tempfile
+import logging
+from unittest import TestCase, SkipTest
+try:
+    from unittest.mock import patch
+except ImportError:
+    from mock import patch
+
+MODULE_PATH = os.path.abspath(os.path.dirname(__file__))
+FIXTURE_PATH = os.path.sep.join([MODULE_PATH, 'fixtures', ])
+TEMP_PATH = os.path.sep.join([MODULE_PATH, 'tmp', ])
+
+sys.path.append(os.path.join(FIXTURE_PATH, 'bin'))
+import fake_ssh_keyscan
+
+from ssh_harness.contexts import BackupEditAndRestore
+from ssh_harness import BaseSshClientTestCase
 
 
-from ssh_harness import BaseSshClientTestCase as SshHarness
+class SshHarness(BaseSshClientTestCase):
+    """Dummy subclass
+
+    We use inheritance to insulate the base-class from changes made here
+    that could be potentially harmful for other test-suites."""
+
+    # _errors = {}  # so it is not shared with the BaseSshClient class
+    USE_AUTH_METHOD = BaseSshClientTestCase.AUTH_METHOD_PUBKEY
+
+
+class SshHarnessNoop(SshHarness):
+
+    @classmethod
+    def noop(cls, *args, **kwargs):
+        pass
+
+    _preconditions = noop
+    _generate_sshd_config = noop
+    _generate_private_keys = noop
+    _generate_keys = noop
+    _generate_authzd_keys_file = noop
+    _generate_environment_file = noop
+    _start_sshd = noop
+    _kill_sshd = noop
+    _update_user_known_hosts = noop
 
 
 class SshHarnessHelpersTestCase(TestCase):
 
     def setUp(self):
         self._unknown_program = './do-not-exists'
+        self._known_program = '/bin/false'
 
     def tearDown(self):
-        SshHarness._errors = dict()
+        for k in list(SshHarness._errors.keys()):
+            del SshHarness._errors[k]
 
     def test_check_auxiliary_program_success(self):
-        self.assertTrue(SshHarness._check_auxiliary_program('/bin/false'))
+        self.assertTrue(
+            SshHarness._check_auxiliary_program(self._known_program))
 
     def test_check_auxiliary_program_failure_without_error(self):
         self.assertFalse(
             SshHarness._check_auxiliary_program(self._unknown_program,
                                                 error=False))
-        self.assertNotIn(self._unknown_program, SshHarness._errors)
+        self.assertNotIn(self._unknown_program,
+                         SshHarness._errors)
 
     def test_check_auxiliary_program_failure_with_error(self):
         self.assertFalse(
-            SshHarness._check_auxiliary_program(self._unknown_program))
-        self.assertIn(self._unknown_program, SshHarness._errors)
+            SshHarness._check_auxiliary_program(self._unknown_program,
+                                                error=True))
+        self.assertIn(self._unknown_program,
+                      SshHarness._errors)
+
+    def test_check_auxiliary_program_success_with_error(self):
+        self.assertTrue(
+            SshHarness._check_auxiliary_program(self._known_program,
+                                                error=True))
+        self.assertNotIn(self._known_program,
+                         SshHarness._errors)
+
+
+class SshHarnessCheckDirTestCase(TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        if not os.path.isdir(TEMP_PATH):
+            os.makedirs(TEMP_PATH, stat.S_IRWXU)
+        else:
+            res = os.stat(TEMP_PATH)
+            if(stat.S_IRWXU > res.st_mode
+               and not os.chmod(TEMP_PATH, mode=stat.S_IRWXU)):
+                raise SkipIf("Permissions on directory `{}' aren't right"
+                             " and I failed in attempting to fix them."
+                             .format(TEMP_PATH))
+
+    def setUp(self):
+        self._temp_sub_dir = tempfile.mkdtemp(dir=TEMP_PATH,
+                                              prefix='',
+                                              suffix='')
+        os.chmod(self._temp_sub_dir, stat.S_IRUSR | stat.S_IXUSR)
+
+    def tearDown(self):
+        os.rmdir(self._temp_sub_dir)
+        for k in list(SshHarness._errors.keys()):
+            del SshHarness._errors[k]  # Reset class error
+
+    def test_check_dir_success_with_default_mode(self):
+        self.assertTrue(SshHarness._check_dir(TEMP_PATH, stat.S_IRWXU))
+
+    def test_check_dir_failure_with_default_mode(self):
+        self.assertFalse(SshHarness._check_dir(self._temp_sub_dir,
+                                               stat.S_IRWXU))
+
+        error = list(SshHarness._errors.values())[0]
+        self.assertRegexpMatches(error,
+                                 'Insufficient permissions on directory.*')
+
+    def test_check_dir_failure_on_directory_creation(self):
+        path = os.path.join(self._temp_sub_dir,
+                            'directory_I_should_not_be_able_to_create')
+
+        self.assertFalse(SshHarness._check_dir(path))
+        error = list(SshHarness._errors.keys())[0]
+        self.assertRegexpMatches(
+            error,
+            '_skip\(exc=\[Errno 13\] Permission denied:.*\)')
+
+
+# -----------------------------------------------------------------------------
+
+
+class SshHarnessSkip(SshHarnessNoop):
+
+    UPDATE_SSH_CONFIG = False
+
+
+class SshHarnessSkipTestCase(TestCase):
+
+    def tearDown(self):
+        for k in list(SshHarness._errors.keys()):
+            del SshHarness._errors[k]
+        self.assertTrue(
+            SshHarness._errors is BaseSshClientTestCase._errors)
+
+    def test__skip_raises_skip_exception(self):
+        SshHarness._errors['fictional_func1()'] = 'Some message'
+        SshHarness._errors['fictional_func2()'] = 'Some other message'
+        with self.assertRaisesRegexp(
+                SkipTest,
+                "One or more errors occurred while trying to setup the "
+                "functional test-suite.*"):
+            SshHarness._skip()
+
+
+class SshHarnessSetUpClassTestCase(TestCase):
+
+    def tearDown(self):
+        for k in list(SshHarness._errors.keys()):
+            del SshHarness._errors[k]
+        self.assertTrue(
+            SshHarness._errors is BaseSshClientTestCase._errors)
+        if 'SSH_HARNESS_DEBUG' in os.environ:
+            del os.environ['SSH_HARNESS_DEBUG']
+
+    def test_setupclass_calls_skip(self):
+        SshHarness._errors['fictional_func1()'] = 'Some message'
+        SshHarness._errors['fictional_func2()'] = 'Some other message'
+        with self.assertRaisesRegexp(
+                SkipTest,
+                "One or more errors occurred while trying to setup the "
+                "functional test-suite.*"):
+            SshHarnessSkip.setUpClass()
+
+    def test_loglevel_set_if_environment_var_defined(self):
+        os.environ['SSH_HARNESS_DEBUG'] = '1'
+        with patch('ssh_harness.logger') as mock_logger:
+            SshHarnessSkip.setUpClass()
+
+        mock_logger.setLevel.assert_called_once_with(logging.DEBUG, )
+
+
+# -----------------------------------------------------------------------------
+
+
+class SshHarnessUpdateUserKnownHosts(SshHarness):
+
+    UPDATE_SSH_CONFIG = False
+    USE_AUTH_METHOD = (True, True, )
+    SSH_KEYSCAN_BIN = os.path.join(FIXTURE_PATH, 'bin', 'fake_ssh_keyscan.py')
+    _context_name = 'ssh_harness_update_user_known_hosts'
+    # This path must be kept in sync with the one found in the
+    # ``fake_ssh_keyscan`` script.
+    _KNOWN_HOSTS_PATH = os.path.join(TEMP_PATH, 'user_known_hosts')
+    _errors = dict()
+
+
+class UpdateUserKnownHostTestCase(TestCase):
+
+    def tearDown(self):
+        for var in ['FAKE_SSH_KEYSCAN_QUIET', 'FAKE_SSH_KEYSCAN_FAIL']:
+            if var in os.environ:
+                del os.environ[var]
+        BackupEditAndRestore.clear_context(
+            SshHarnessUpdateUserKnownHosts._context_name)
+        SshHarnessUpdateUserKnownHosts._errors = dict()
+
+    def test__update_user_known_hosts_fails_if_no_output(self):
+        os.environ['FAKE_SSH_KEYSCAN_QUIET'] = '1'
+        SshHarnessUpdateUserKnownHosts._update_user_known_hosts()
+
+        self.assertIn('_update_user_known_hosts',
+                      SshHarnessUpdateUserKnownHosts._errors)
+        self.assertRegexpMatches(
+            SshHarnessUpdateUserKnownHosts._errors['_update_user_known_hosts'],
+            'ssh-keyscan failed with status 0.*')
+
+    def test__update_user_known_hosts_fails_if_error(self):
+        os.environ['FAKE_SSH_KEYSCAN_FAIL'] = '1'
+        SshHarnessUpdateUserKnownHosts._update_user_known_hosts()
+        self.assertRegexpMatches(
+            SshHarnessUpdateUserKnownHosts._errors['_update_user_known_hosts'],
+            'ssh-keyscan failed with status 1.*')
+
+    def test__update_user_known_hosts_success(self):
+        SshHarnessUpdateUserKnownHosts._update_user_known_hosts()
+
+        self.assertTrue(
+            os.path.exists(SshHarnessUpdateUserKnownHosts._KNOWN_HOSTS_PATH))
+        with open(SshHarnessUpdateUserKnownHosts._KNOWN_HOSTS_PATH, 'r') as f:
+            content = f.read()
+        self.assertEqual(content,
+                         ''.join([fake_ssh_keyscan.FILE_CONTENT + '\n', ] * 2))
+
+
+# -----------------------------------------------------------------------------
+
+
+class SshHarnessUpdateSshConfig(SshHarness):
+
+    UPDATE_SSH_CONFIG = False
+    USE_AUTH_METHOD = (True, True, )
+    _SSH_CONFIG_PATH = os.path.join(TEMP_PATH, 'ssh-config')
+    _context_name = 'ssh_harness_update_ssh_config'
+
+
+class UpdateSshConfigTestCase(TestCase):
+
+    def setUp(self):
+        self._args = SshHarnessUpdateSshConfig._gather_config()
+        with open(SshHarnessUpdateSshConfig._SSH_CONFIG_PATH, 'w+'):
+            pass
+
+    def tearDown(self):
+        if os.path.isfile(SshHarnessUpdateSshConfig._SSH_CONFIG_PATH):
+            os.unlink(SshHarnessUpdateSshConfig._SSH_CONFIG_PATH)
+
+    def test_update_ssh_config_when_disabled(self):
+        SshHarnessUpdateSshConfig._update_ssh_config(self._args)
+
+    def test_update_ssh_config_when_enabled(self):
+        SshHarnessUpdateSshConfig.UPDATE_SSH_CONFIG = True
+        SshHarnessUpdateSshConfig._update_ssh_config(self._args)
+
+        self.assertTrue(
+            os.path.isfile(SshHarnessUpdateSshConfig._SSH_CONFIG_PATH))
+
+        with open(SshHarnessUpdateSshConfig._SSH_CONFIG_PATH, 'r') as f:
+            self._args.update({'blanks': ' ' * 8})
+            line_count = 0
+            for line in f:
+                self.assertRegexpMatches(line,
+                                         '^(Host {ssh_config_host_name}'
+                                         '|{blanks}HostName {address}'
+                                         '|{blanks}Port {port}'
+                                         '|{blanks}IdentityFile {identity})?$'
+                                         .format(**self._args))
+                line_count += 1
+
+        self.assertEqual(5, line_count)
+        BackupEditAndRestore.clear_context(
+            SshHarnessUpdateSshConfig._context_name)
+
+
+# -----------------------------------------------------------------------------
+
+
+class SshHarnessEnv(SshHarness):
+
+    SSH_ENVIRONMENT_FILE = True
+    SSH_ENVIRONMENT = {
+        'VARIABLE1': 'VALUE1',
+        'VARIABLE2': 'VALUE2',
+        }
+    _SSH_ENVIRONMENT_PATH = os.path.join(TEMP_PATH,
+                                         'environment')
+    _context_name = 'ssh_harness_environment'
+
+
+class SshHarnessEnvironmentTestCase(TestCase):
+
+    def test_create_environment_file(self):
+        SshHarnessEnv._generate_environment_file()
+
+        expected_content = '{}\n'.format(
+            '\n'.join(['{}={}'.format(k, v)
+                       for k, v in SshHarnessEnv.SSH_ENVIRONMENT.items()]))
+        self.assertTrue(
+            os.path.isfile(SshHarnessEnv._SSH_ENVIRONMENT_PATH))
+        with open(SshHarnessEnv._SSH_ENVIRONMENT_PATH, 'r') as f:
+            self.assertEqual(f.read(), expected_content)
+
+        BackupEditAndRestore.clear_context(SshHarnessEnv._context_name)
+
+    def test_create_environment_file_when_disabled(self):
+        SshHarnessEnv.SSH_ENVIRONMENT_FILE = False
+        SshHarnessEnv._generate_environment_file()
+
+        self.assertFalse(
+            os.path.isfile(SshHarnessEnv._SSH_ENVIRONMENT_PATH))
+
+
+# -----------------------------------------------------------------------------
+
+
+class SshHarnessAuthzdKeys(SshHarness):
+
+    AUTHORIZED_KEY_OPTIONS = 'from="127.0.0.1"'
+    AUTHORIZED_KEYS_PATH = os.path.join(TEMP_PATH, 'autorized_keys')
+    SSH_ENVIRONMENT = {
+        'VARIABLE1': 'VALUE1',
+        'VARIABLE2': 'VALUE2',
+        }
+    USER_RSA_KEY_PATH = os.path.join(TEMP_PATH, 'id_rsa')
+
+
+class SshHarnessAuthzdKeysTestCase(TestCase):
+
+    def setUp(self):
+        self._pubkey_data = 'Base64 Key Data'
+        self._pubkey = '{}.pub'.format(SshHarnessAuthzdKeys.USER_RSA_KEY_PATH)
+        self._options = SshHarnessAuthzdKeys.AUTHORIZED_KEY_OPTIONS
+        self._env = SshHarnessAuthzdKeys.SSH_ENVIRONMENT
+        with open(self._pubkey, 'w+') as f:
+            f.write(self._pubkey_data)
+
+    def tearDown(self):
+        os.unlink(self._pubkey)
+        os.unlink(SshHarnessAuthzdKeys.AUTHORIZED_KEYS_PATH)
+        SshHarnessAuthzdKeys.AUTHORIZED_KEY_OPTIONS = self._options
+        SshHarnessAuthzdKeys.SSH_ENVIRONMENT = self._env
+
+    def test__generate_authzd_keys_file_with_options_and_env(self):
+        expected_content = "{},{} {}\n".format(
+            SshHarnessAuthzdKeys.AUTHORIZED_KEY_OPTIONS,
+            ','.join([
+                'environment="{}={}"'.format(k, v)
+                for k, v in SshHarnessAuthzdKeys.SSH_ENVIRONMENT.items()]),
+            self._pubkey_data)
+
+        SshHarnessAuthzdKeys._generate_authzd_keys_file()
+
+        self.assertTrue(
+            os.path.isfile(SshHarnessAuthzdKeys.AUTHORIZED_KEYS_PATH))
+
+        with open(SshHarnessAuthzdKeys.AUTHORIZED_KEYS_PATH, 'r') as f:
+            content = f.read()
+        self.assertEqual(content, expected_content)
+
+    def test__generate_authz_keys_file_with_env_without_options(self):
+        SshHarnessAuthzdKeys.AUTHORIZED_KEY_OPTIONS = None
+        expected_content = "{} {}\n".format(
+            ','.join([
+                'environment="{}={}"'.format(k, v)
+                for k, v in SshHarnessAuthzdKeys.SSH_ENVIRONMENT.items()]),
+            self._pubkey_data)
+
+        SshHarnessAuthzdKeys._generate_authzd_keys_file()
+
+        self.assertTrue(
+            os.path.isfile(SshHarnessAuthzdKeys.AUTHORIZED_KEYS_PATH))
+
+        with open(SshHarnessAuthzdKeys.AUTHORIZED_KEYS_PATH, 'r') as f:
+            content = f.read()
+        self.assertEqual(content, expected_content)
+
+    def test__generate_authz_keys_file_with_options_without_env(self):
+        SshHarnessAuthzdKeys.AUTHORIZED_KEY_OPTIONS = None
+        expected_content = "{} {}\n".format(
+            ','.join([
+                'environment="{}={}"'.format(k, v)
+                for k, v in SshHarnessAuthzdKeys.SSH_ENVIRONMENT.items()]),
+            self._pubkey_data)
+
+        SshHarnessAuthzdKeys._generate_authzd_keys_file()
+
+        self.assertTrue(
+            os.path.isfile(SshHarnessAuthzdKeys.AUTHORIZED_KEYS_PATH))
+
+        with open(SshHarnessAuthzdKeys.AUTHORIZED_KEYS_PATH, 'r') as f:
+            content = f.read()
+        self.assertEqual(content, expected_content)
+
+    def test__generate_authz_keys_file_without_env_or_options(self):
+        SshHarnessAuthzdKeys.AUTHORIZED_KEY_OPTIONS = None
+        SshHarnessAuthzdKeys.SSH_ENVIRONMENT = None
+        expected_content = '{}\n'.format(self._pubkey_data)
+
+        SshHarnessAuthzdKeys._generate_authzd_keys_file()
+
+        self.assertTrue(
+            os.path.isfile(SshHarnessAuthzdKeys.AUTHORIZED_KEYS_PATH))
+
+        with open(SshHarnessAuthzdKeys.AUTHORIZED_KEYS_PATH, 'r') as f:
+            content = f.read()
+        self.assertEqual(content, expected_content)
+
+
+# -----------------------------------------------------------------------------
+
+
+class SshHarnessGenerateKeys(SshHarness):
+
+    _FILES = SshHarness._FILES.copy()
+    # USE_AUTH_METHOD = SshHarness.AUTH_METHOD_PUBKEY
+    FIXTURE_PATH = os.path.join(
+        os.path.abspath(os.getcwd()), 'tests', 'fixtures', 'sshd')
+
+
+class SshHarnessGenerateKeysTestCase(TestCase):
+
+    def setUp(self):
+        # To prevent damaging the class attribute
+        self._FILES = SshHarnessGenerateKeys._FILES.copy()
+        SshHarnessGenerateKeys._gather_config()
+        # We just need to generate one.
+        del SshHarnessGenerateKeys._FILES['USER_RSA_KEY']
+        del SshHarnessGenerateKeys._FILES['HOST_RSA_KEY']
+        del SshHarnessGenerateKeys._FILES['HOST_ECDSA_KEY']
+        self.pubkey = '{}.pub'.format(SshHarnessGenerateKeys.HOST_DSA_KEY_PATH)
+
+    def tearDown(self):
+        SshHarnessGenerateKeys._FILES = self._FILES
+        SshHarnessGenerateKeys.SSH_KEYGEN_BIN = SshHarness.SSH_KEYGEN_BIN
+        if os.path.isfile(self.pubkey):
+            os.unlink(self.pubkey)
+        if os.path.isfile(SshHarnessGenerateKeys.HOST_DSA_KEY_PATH):
+            os.unlink(SshHarnessGenerateKeys.HOST_DSA_KEY_PATH)
+
+    def test_generate_keys_success(self):
+        SshHarnessGenerateKeys._generate_keys()
+
+        self.assertTrue(
+            os.path.isfile(SshHarnessGenerateKeys.HOST_DSA_KEY_PATH))
+        self.assertTrue(
+            os.path.isfile(self.pubkey))
+        with open(self.pubkey, 'r') as f:
+            content = f.read()
+        self.assertRegexpMatches(content,
+                                 '^ssh-dss AAAA.*\*DO NOT DISSEMINATE\*$')
+
+    def test_generate_keys_failure(self):
+        SshHarnessGenerateKeys.SSH_KEYGEN_BIN = '/bin/false'
+        with self.assertRaises(RuntimeError):
+            SshHarnessGenerateKeys._generate_keys()
+
+        self.assertFalse(
+            os.path.isfile(SshHarnessGenerateKeys.HOST_DSA_KEY_PATH))
+        self.assertFalse(
+            os.path.isfile(self.pubkey))
+
+    def test_generate_keys_removes_existing_keys(self):
+        with open(SshHarnessGenerateKeys.HOST_DSA_KEY_PATH, 'w') as f:
+            f.write('Some data that does not look like a SSH key')
+            SshHarnessGenerateKeys._generate_keys()
+
+        self.assertTrue(
+            os.path.isfile(SshHarnessGenerateKeys.HOST_DSA_KEY_PATH))
+        self.assertTrue(
+            os.path.isfile(self.pubkey))
+        with open(self.pubkey, 'r') as f:
+            content = f.read()
+        self.assertRegexpMatches(content,
+                                 '^ssh-dss AAAA.*\*DO NOT DISSEMINATE\*$')
+
+
+# -----------------------------------------------------------------------------
+
+
+class SshHarnessSshd(SshHarness):
+
+    # Copied because we will mess with it in the test-suite below.
+    _FILES = SshHarness._FILES.copy()
+    # Override some defaults.
+    SSHD_BIN = '/bin/echo'
+    USE_AUTH_METHOD = (True, True, )  # Necessary
+
+
+class SshHarnessSshdTestCase(TestCase):
+
+    def setUp(self):
+        # We remove the user RSA key file default because we don't want it to
+        # be actually generated.
+        self._args = SshHarnessSshd._gather_config()
+        del SshHarnessSshd._FILES['USER_RSA_KEY']
+        SshHarnessSshd._generate_keys()
+
+        SshHarnessSshd._generate_sshd_config(self._args)
+
+    def tearDown(self):
+        SshHarnessSshd._FILES['USER_RSA_KEY'] = 'id_rsa'
+        SshHarnessSshd.SSHD_BIN = '/bin/echo'
+        SshHarnessSshd.tearDownClass()
+        for k in list(SshHarness._errors.keys()):
+            del SshHarness._errors[k]
+
+    def test_start_sshd_failure(self):
+        with self.assertRaises(SkipTest):
+            SshHarnessSshd._start_sshd()
+
+        self.assertIn(SshHarnessSshd.SSHD_BIN, SshHarnessSshd._errors)
+        self.assertIs(SshHarnessSshd._SSHD, None)
+
+    def test_start_sshd_success(self):
+        # Use the real SSHD
+        SshHarnessSshd.SSHD_BIN = SshHarness.SSHD_BIN
+
+        SshHarnessSshd._start_sshd()
+
+        self.assertNotIn(SshHarnessSshd.SSHD_BIN, SshHarnessSshd._errors)
+        self.assertIsNot(SshHarnessSshd._SSHD, None)
+
+
+# -----------------------------------------------------------------------------
+
+
+class DeleteFileTestCase(TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.RO_TEMP_SUB_DIR = tempfile.mkdtemp(dir=TEMP_PATH,
+                                               prefix='',
+                                               suffix='')
+        cls.UNDELETABLE_FILE = os.path.join(cls.RO_TEMP_SUB_DIR,
+                                            'undeletable')
+        with open(cls.UNDELETABLE_FILE, 'w+'):
+            pass
+        os.chmod(cls.RO_TEMP_SUB_DIR, stat.S_IRUSR | stat.S_IXUSR)
+
+    @classmethod
+    def tearDownClass(cls):
+        os.chmod(cls.RO_TEMP_SUB_DIR, stat.S_IRWXU)
+        os.unlink(cls.UNDELETABLE_FILE)
+        os.rmdir(cls.RO_TEMP_SUB_DIR)
+
+    def test_delete_file_on_non_existant_file(self):
+        SshHarness._delete_file(
+            os.path.join(TEMP_PATH, 'some_file_that_should_not_exist'))
+
+    def test_delete_file_on_undeletable_file_ro_parent_dir(self):
+        SshHarness._delete_file(self.__class__.UNDELETABLE_FILE)
+
+    def test_delete_file_succes(self):
+        with tempfile.NamedTemporaryFile(delete=False,
+                                         dir=TEMP_PATH,
+                                         suffix='',
+                                         prefix='') as f:
+            pass
+
+        self.assertTrue(os.path.exists(f.name))
+        SshHarness._delete_file(f.name)
+        self.assertFalse(os.path.exists(f.name))
+
+
+# -----------------------------------------------------------------------------
+
+
+class SshHarnessProtectPrivateKeys(SshHarness):
+
+    FIXTURE_PATH = os.path.join(TEMP_PATH, 'subdir', 'subsubdir')
+
+
+class ProtectPrivateKeysTestCase(TestCase):
+
+    def setUp(self):
+        if not os.path.isdir(SshHarnessProtectPrivateKeys.FIXTURE_PATH):
+            os.makedirs(SshHarnessProtectPrivateKeys.FIXTURE_PATH,
+                        mode=504)
+        bits = SshHarnessProtectPrivateKeys.FIXTURE_PATH.split(os.sep)
+        self._subsubdir = SshHarnessProtectPrivateKeys.FIXTURE_PATH
+        self._subdir = os.sep.join(bits[:-1])
+        # The following in case for some reason the directories were hanging
+        # around (from a failed previous run...)
+        os.chmod(self._subsubdir, 504)
+        os.chmod(self._subdir, 504)
+
+    def tearDown(self):
+        if os.path.isdir(self._subsubdir):
+            os.rmdir(self._subsubdir)
+        if os.path.isdir(self._subdir):
+            os.rmdir(self._subdir)
+
+    def test__protect_private_keys(self):
+        SshHarnessProtectPrivateKeys._protect_private_keys()
+
+        sdir_mode = stat.S_IMODE(os.stat(self._subdir).st_mode)
+        self.assertEqual(sdir_mode & SshHarnessProtectPrivateKeys._MODE_MASK,
+                         stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP)
+        ssdir_mode = stat.S_IMODE(os.stat(self._subsubdir).st_mode)
+        self.assertEqual(ssdir_mode & SshHarnessProtectPrivateKeys._MODE_MASK,
+                         stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP)
+
+
+# vim: syntax=python:sws=4:sw=4:et:
