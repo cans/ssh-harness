@@ -590,9 +590,14 @@ UsePAM no
 
     @classmethod
     def _start_sshd(cls):
+        sshd_startup_command = [
+            cls.SSHD_BIN, '-D', '-4', '-f', cls.SSHD_CONFIG_PATH,
+            ]
+        logger.debug('Starting SSH Deamon with command `{}'
+                     .format(sshd_startup_command))
         # Start the SSH daemon
-        cls._SSHD = subprocess.Popen([
-            '/usr/sbin/sshd', '-D', '-4', '-f', cls.SSHD_CONFIG_PATH])
+        cls._SSHD = subprocess.Popen(sshd_startup_command,
+                                     stdout=subprocess.PIPE)
 
         # This is silly, but simple enough and works apparently
         for round in range(0, 6):
@@ -601,7 +606,9 @@ UsePAM no
             else:
                 break
         if round >= 5:
-            cls._errors['ssh daemon'] = 'Not starting or crashing at startup.'
+            cls._kill_sshd()
+            cls._SSHD = None
+            cls._errors[cls.SSHD_BIN] = 'Not starting or crashing at startup.'
             cls._skip()
 
     @classmethod
@@ -643,7 +650,7 @@ Host {ssh_config_host_name}
             # :manpage:`ssh-keyscan(1)` fails if either fail.
             for ip_version in ['-4', '-6', ]:
                 returncode, out, err = cls.runCommand([
-                    'ssh-keyscan', '-H', ip_version, '-p', str(cls.PORT),
+                    cls.SSH_KEYSCAN_BIN, '-H', ip_version, '-p', str(cls.PORT),
                     '-t', 'dsa,rsa,ecdsa', cls.BIND_ADDRESS, ])
 
                 # We check the length of `out` because in case of connection
