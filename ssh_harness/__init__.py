@@ -1,6 +1,6 @@
 # -*- coding: utf-8-unix; -*-
 #
-#  Copyright © 2014, Nicolas CANIART <nicolas@caniart.net>
+#  Copyright © 2014-2015, Nicolas CANIART <nicolas@caniart.net>
 #
 #  This file is part of vcs-ssh.
 #
@@ -326,8 +326,6 @@ class BaseSshClientTestCase(TestCase):
     restored.
     """
 
-    _NEED_TO_BE_RESTORED = []
-
     _KEY_FILES_MODE = 0x00000000 | stat.S_IRUSR
     """Access mode that is set on files containing private keys."""
 
@@ -386,17 +384,7 @@ PermitEmptyPasswords no
 ChallengeResponseAuthentication no
 PasswordAuthentication {password_auth}
 
-# Kerberos options
-#KerberosAuthentication no
-#KerberosGetAFSToken no
-#KerberosOrLocalPasswd yes
-#KerberosTicketCleanup yes
-
-# GSSAPI options
 GSSAPIAuthentication no
-GSSAPICleanupCredentials yes
-GSSAPIKeyExchange yes
-GSSAPIStoreCredentialsOnRekey yes
 
 X11Forwarding yes
 X11DisplayOffset 10
@@ -423,7 +411,7 @@ UsePAM no
         for func, msg in cls._errors.items():
             reason += ' - {}\n'.format(func)
             for line in msg.splitlines():
-                reason += '    {}'.format(line)
+                reason += '    {}\n'.format(line)
         # Skip.
         raise SkipTest(reason)
 
@@ -437,12 +425,6 @@ UsePAM no
             return 'rsa'
 
     @classmethod
-    def _exc2error(cls, exc):
-        if exc is not None:
-            cls._errors['_skip(exc={})'.format(exc)] = \
-                traceback.format_exc()
-
-    @classmethod
     def _check_auxiliary_program(cls, path, error=True):
         if not os.path.isfile(path):
             if error:
@@ -451,11 +433,13 @@ UsePAM no
 
         res = os.access(path, os.R_OK | os.X_OK)
         if res is False and error is True:
-            cls._errors[path] =     \
-                "Program `{}' is not executable, its mode is {},"         \
-                " expected {}".format(
-                    cls._mode2string(stat.S_IMODE(res.st_mode)),
-                    cls._mode2string(stat.S_IMODE(cls._BIN_MASK)))
+            cls._errors[path] = ("Program `{}' is not executable, its mode"
+                                 " is {}, expected {}"
+                                 .format(
+                                     cls._mode2string(
+                                         stat.S_IMODE(res.st_mode)),
+                                     cls._mode2string(
+                                         stat.S_IMODE(cls._BIN_MASK))))
         return res
 
     @classmethod
@@ -465,8 +449,9 @@ UsePAM no
         if not os.path.isdir(path):
             try:
                 os.makedirs(path, mode)
-            except Exception as e:
-                cls._exc2error(exc=e)
+            except OSError as e:
+                cls._errors['_skip(exc={})'.format(e)] = \
+                    traceback.format_exc()
                 return False
 
         # Ok we got the directory, but since the mask passed to chmod is
@@ -477,19 +462,13 @@ UsePAM no
         res = os.stat(path)
         if mode != (res.st_mode & mode):
             cls._errors['_check_dir({}, {})'.format(path, mode)] = \
-                "Unsufficient permissions on directory `{}': need" \
+                "Insufficient permissions on directory `{}': need" \
                 " {} but got {}.".format(
                     path,
                     cls._mode2string(mode),
                     cls._mode2string(stat.S_IMODE(res.st_mode)))
             return False
         return True
-
-    # @classmethod
-    # def _add_file_to_restore(cls, file):
-    #     """Add a file to the list of those to be restore at the end of the
-    #     tests."""
-    #     cls._NEED_TO_BE_RESTORED.append(file)
 
     @classmethod
     def _delete_file(cls, file):
@@ -514,30 +493,22 @@ UsePAM no
 
             if os.path.isfile(key_file):
                 os.unlink(key_file)
-            try:
-                process = subprocess.Popen(
-                    ['ssh-keygen', '-t', key_type, '-b', cls._BITS[key_type],
-                     '-N', '', '-f', key_file, '-C',
-                     'Weak key generated for test purposes only '
-                     '*DO NOT DISSEMINATE*'],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE)
-                process.communicate()
-            except subprocess.CalledProcessError:
-                raise Exception('ssh-keygen failed with exit-status {} output:'
-                                '\n==STDOUT==\n"{}"\n==STDERR==\n{}'
-                                .format(process.returncode,
-                                        process.stdout.read(),
-                                        process.stderr.read()))
+            returncode, out, err = cls.runCommand([
+                cls.SSH_KEYGEN_BIN,
+                '-t', key_type,
+                '-b', cls._BITS[key_type],
+                '-N', '', '-f', key_file,
+                '-C',
+                'Weak key generated for test purposes only '
+                '*DO NOT DISSEMINATE*'
+                ])
+
+            if 0 != returncode:
+                raise RuntimeError('ssh-keygen failed with exit-status {} '
+                                   'output:\n==STDOUT==\n{}\n==STDERR==\n{}'
+                                   .format(returncode, out, err))
             else:
-                if 0 != process.returncode:
-                    raise Exception('ssh-keygen failed with exit-status {} '
-                                    'output:\n==STDOUT==\n"{}"\n==STDERR==\n{}'
-                                    .format(process.returncode,
-                                            process.stdout.read(),
-                                            process.stderr.read()))
-                else:
-                    os.chmod(key_file, cls._KEY_FILES_MODE)
+                os.chmod(key_file, cls._KEY_FILES_MODE)
 
     @classmethod
     def _generate_environment_file(cls):
@@ -565,12 +536,16 @@ UsePAM no
                     cls.AUTHORIZED_KEY_OPTIONS += ',' + env
                 else:
                     cls.AUTHORIZED_KEY_OPTIONS = env
+
             if cls.AUTHORIZED_KEY_OPTIONS is not None:
-                logger.debug("{} ".format(cls.AUTHORIZED_KEY_OPTIONS))
-                authzd_file.write("{} ".format(cls.AUTHORIZED_KEY_OPTIONS))
-            logger.debug("{}\n".format(key))
-            authzd_file.write("{}\n".format(key))
-        logger.debug("=" * 80)
+                authzd_file.write(cls.AUTHORIZED_KEY_OPTIONS)
+                authzd_file.write(' ')
+
+            authzd_file.write(key)
+            authzd_file.write('\n')
+            logger.debug("{} {}".format(cls.AUTHORIZED_KEY_OPTIONS, key))
+
+        logger.debug("=" * 60)
 
     @classmethod
     def _generate_sshd_config(cls, args):
@@ -590,7 +565,7 @@ UsePAM no
             argname = '{}_path'.format(k.lower())
             if not hasattr(cls, attrname):
                 setattr(cls, attrname, os.path.join(cls.FIXTURE_PATH, v))
-                args.update({argname:  getattr(cls, attrname), })
+            args.update({argname:  getattr(cls, attrname), })
 
         # Set the TCP port and IP address the daemon will listen to.
         args.update({'port': cls.PORT,
@@ -646,7 +621,6 @@ Host {ssh_config_host_name}
         Port {port}
         IdentityFile {identity}
 '''.format(**args))
-        # cls._add_file_to_restore(user_config)
 
     @classmethod
     def _update_user_known_hosts(cls):
@@ -688,11 +662,9 @@ Host {ssh_config_host_name}
                     known_hosts.write(out)
         # Only report an error if both IPv4 and IPv6 scan failed
         if len(failures) == 2:
-            cls._errors['_update_user_know_hosts'] = (
+            cls._errors['_update_user_known_hosts'] = (
                 'ssh-keyscan failed with status {}: {}\nOutput: {}'
                 .format(returncode, err, out))  # keyscanner.
-
-        # cls._add_file_to_restore(known_hosts)
 
     @classmethod
     def _mode2string(cls, mode):
