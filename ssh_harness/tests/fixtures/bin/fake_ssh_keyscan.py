@@ -27,13 +27,14 @@ TEMP_PATH = os.path.normpath(os.path.join(MODULE_PATH, '..', 'tmp'))
 
 
 if '__main__' == __name__:
-    if 'SSH_KEYSCAN_FAIL' in os.environ:
-        sys.exit(False)
-    if 'SSH_KEYSCAN_QUIET' in os.environ:
-        # Exits successfully but without producing any output.
+    if 'FAKE_SSH_KEYSCAN_FAIL' in os.environ:
         sys.exit(True)
+    if 'FAKE_SSH_KEYSCAN_QUIET' in os.environ:
+        # Exits successfully but without producing any output.
+        sys.exit(False)
 
     print(FILE_CONTENT)
+    sys.exit(False)
 
 
 # vim: syntax=python:sws=4:sw=4:et:
