@@ -60,8 +60,10 @@ if os.path.exists(handler.baseFilename):
 # both under Python 2 and Python 3 (Py2 io.String only accepts unicode args).
 if (3, 0, 0, ) > sys.version_info:
     from StringIO import StringIO
+    _PermissionError = OSError
 else:
     from io import StringIO
+    _PermissionError = PermissionError
 import string
 
 
@@ -144,7 +146,7 @@ class BaseSshClientTestCase(TestCase):
     All those data are, by default written and stored in a
     'tests/fixtures/sshd' directory within the working directory of the
     test runner that runs the test. This can be changed by overriding
-    the ``FIXTURE_PATH`` class attribute of the test case.
+    the ``SSH_BASEDIR`` class attribute of the test case.
 
     .. example::
 
@@ -276,8 +278,8 @@ class BaseSshClientTestCase(TestCase):
     """
 
     MODULE_PATH = os.path.abspath(os.path.dirname(__file__))
-    FIXTURE_PATH = os.path.join(
-        os.path.abspath(os.getcwd()), 'tests', 'fixtures', 'sshd')
+    SSH_BASEDIR = os.path.join(
+        os.path.abspath(os.getcwd()), 'tests', 'tmp', 'sshd')
 
     AUTH_METHOD_PASSWORD = (True, False, )
     AUTH_METHOD_PUBKEY = (False, True, )
@@ -566,7 +568,7 @@ UsePAM no
             attrname = '{}_PATH'.format(k)
             argname = '{}_path'.format(k.lower())
             if not hasattr(cls, attrname):
-                setattr(cls, attrname, os.path.join(cls.FIXTURE_PATH, v))
+                setattr(cls, attrname, os.path.join(cls.SSH_BASEDIR, v))
             args.update({argname:  getattr(cls, attrname), })
 
         # Set the TCP port and IP address the daemon will listen to.
@@ -691,7 +693,7 @@ Host {ssh_config_host_name}
         private-key by replacing one of its parent directory by another one
         containing offensive keys).
         """
-        path = cls.FIXTURE_PATH
+        path = cls.SSH_BASEDIR
         while '/' != path:
             res = os.stat(path)
             mode = stat.S_IMODE(res.st_mode)
@@ -711,9 +713,17 @@ Host {ssh_config_host_name}
         private keys to their previous modes.
         (see ::``)"""
         for directory, mode in cls._NEED_CHMOD:
-            subprocess.call([
-                'sudo', 'chmod', cls._mode2string(mode), directory,
+            logger.debug(_("Restoring permissions on `{}' to {}.")
+                         .format(directory, oct(mode)))
+            try:
+                os.chmod(directory, mode)
+            except _PermissionError:
+                subprocess.call([
+                    'sudo', 'chmod', cls._mode2string(mode), directory,
                 ])
+            else:
+                logger.warning(_("Could not restore mode of `{}' to {}.")
+                               .format(directory, oct(mode)))
 
     @classmethod
     def _preconditions(cls):
@@ -731,7 +741,7 @@ Host {ssh_config_host_name}
         pc_met = cls._check_dir(os.path.dirname(cls._SSH_CONFIG_PATH)) \
             and pc_met
         pc_met = cls._check_dir(os.getcwd()) and pc_met
-        pc_met = cls._check_dir(cls.FIXTURE_PATH) and pc_met
+        pc_met = cls._check_dir(cls.SSH_BASEDIR) and pc_met
         pc_met = cls._check_auxiliary_program(cls.SSHD_BIN) and pc_met
         pc_met = cls._check_auxiliary_program(cls.SSH_KEYSCAN_BIN) and pc_met
         pc_met = cls._check_auxiliary_program(cls.SSH_KEYGEN_BIN) and pc_met
