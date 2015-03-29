@@ -72,10 +72,7 @@ def fake_handler(command, ro_dirs, rw_dirs):
 class HaveRequiredCommandTestCase(TestCase):
 
     def test_have_required_command_with_good_command(self):
-        with patch('vcs_ssh.stderr') as stderrmock:
-            res = fake_handler(['true', ],
-                               [],
-                               [])
+        res = fake_handler(['true', ], [], [])
 
         self.assertEqual(0, res)
 

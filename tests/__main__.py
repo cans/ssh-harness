@@ -4,7 +4,7 @@
 #
 import os
 import sys
-from unittest import TestLoader, main
+from unittest import TestLoader
 try:
     from tap import TAPTestRunner as TestRunner
 except ImportError:

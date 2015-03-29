@@ -30,6 +30,7 @@ import time
 import pwd
 import warnings
 from locale import getpreferredencoding
+import exceptions
 
 from .contexts import BackupEditAndRestore
 
@@ -60,11 +61,11 @@ if os.path.exists(handler.baseFilename):
 # both under Python 2 and Python 3 (Py2 io.String only accepts unicode args).
 if (3, 0, 0, ) > sys.version_info:
     from StringIO import StringIO
-    _PermissionError = OSError
 else:
     from io import StringIO
-    _PermissionError = PermissionError
-import string
+_PermissionError = getattr(exceptions,
+                           'PermissionError',
+                           exceptions.OSError)
 
 
 def hexdump(buf, file=sys.stdout, encoding='utf-8'):

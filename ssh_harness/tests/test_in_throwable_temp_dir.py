@@ -106,7 +106,7 @@ class InThrowableTempDirTestCase(TestCase):
 
     def test_in_throwable_temp_dir_failure(self):
         with self.assertRaises(OSError):
-            with InThrowableTempDir(dir=self.__class__.RO_DIR) as ittd:
+            with InThrowableTempDir(dir=self.__class__.RO_DIR):
                 pass
 
     def test_in_throwable_temp_dir_recursion(self):

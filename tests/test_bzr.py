@@ -23,7 +23,6 @@ except:
     from mock import patch
 from unittest import TestCase, skipIf
 
-import vcs_ssh
 from vcs_ssh import bzr_handle
 
 __all__ = [

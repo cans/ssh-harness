@@ -17,6 +17,7 @@
 #  along with vcs-ssh.  If not, see <http://www.gnu.org/licenses/>.
 #
 from __future__ import print_function
+from gettext import lgettext as _
 import os
 import shutil
 import subprocess
@@ -93,14 +94,15 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
          instead os using the _enter/leave_working_copy() methods.
     """
 
+    REPOSITORIES_PATH = os.path.join(TEMP_PATH, 'repositories')
     _REPOSITORIES = {
-        'ro_git': 'fixtures/git-ro.git',
-        'rw_git': 'fixtures/git-rw.git',
-        'ro_hg': 'fixtures/hg-ro',
-        'rw_hg': 'fixtures/hg-rw',
-        'ro_svn': 'fixtures/svn-ro',
-        'rw_svn': 'fixtures/svn-rw',
-        'rw_bzr': 'fixtures/bzr-rw',
+        'ro_git': 'git-ro.git',
+        'rw_git': 'git-rw.git',
+        'ro_hg': 'hg-ro',
+        'rw_hg': 'hg-rw',
+        'ro_svn': 'svn-ro',
+        'rw_svn': 'svn-rw',
+        'rw_bzr': 'bzr-rw',
         }
     """The list of repositories we create for our tests on per access mode (ro, rw)
        and handled VCS type
@@ -291,7 +293,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             elif name.endswith('_svn'):
                 url_scheme = 'svn+' + url_scheme
 
-            setattr(cls, path_attr, os.path.join(MODULE_PATH, path))
+            setattr(cls, path_attr, os.path.join(cls.REPOSITORIES_PATH, path))
             if cls.UPDATE_SSH_CONFIG is False:
                 # Forces use of address + port syntax
                 setattr(cls, url_attr,
@@ -358,7 +360,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
                                                          error=False)
 
         if not pc_met:
-            self._skip()
+            cls._skip()
 
     @classmethod
     def tearDownClass(cls):

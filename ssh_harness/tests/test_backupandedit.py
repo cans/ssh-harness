@@ -94,7 +94,6 @@ class BackupEditAndRestoreTestCase(TestCase):
         self.assertFalse(self._f._restored)
         self._f.__exit__(None, None, None)
 
-
     # -- Checking that the file to edit is being copied if mode is
     #    a, r, U (which implies r) an w+.
 

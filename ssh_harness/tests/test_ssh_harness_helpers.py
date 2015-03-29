@@ -114,9 +114,9 @@ class SshHarnessCheckDirTestCase(TestCase):
             res = os.stat(TEMP_PATH)
             if(stat.S_IRWXU > res.st_mode
                and not os.chmod(TEMP_PATH, mode=stat.S_IRWXU)):
-                raise SkipIf("Permissions on directory `{}' aren't right"
-                             " and I failed in attempting to fix them."
-                             .format(TEMP_PATH))
+                raise SkipTest("Permissions on directory `{}' aren't right"
+                               " and I failed in attempting to fix them."
+                               .format(TEMP_PATH))
 
     def setUp(self):
         self._temp_sub_dir = tempfile.mkdtemp(dir=TEMP_PATH,
