@@ -49,8 +49,8 @@ logger = logging.getLogger('vcs-ssh')
 HAVE_MERCURIAL = False
 if (3, 0, 0, ) > VERSION_INFO:
     try:
-        from mercurial import demandimport
-        demandimport.enable()
+        # from mercurial import demandimport
+        # demandimport.enable()
         from mercurial import dispatch
         HAVE_MERCURIAL = True
     except ImportError:
@@ -62,7 +62,7 @@ __all__ = [
     'VERSION',
     ]
 
-VERSION = (1, 0, 2, )
+VERSION = (1, 0, 3, )
 
 
 def have_required_command(func):

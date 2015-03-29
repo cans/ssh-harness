@@ -16,14 +16,28 @@
 #  You should have received a copy of the GNU General Public License
 #  along with vcs-ssh.  If not, see <http://www.gnu.org/licenses/>.
 #
-try:
-    from distutils import setup
-except ImportError:
-    from distutils.core import setup
-
+from distutils.core import setup, Command
+import glob
 from vcs_ssh import VERSION
 
 _version = "{}.{}.{}".format(*VERSION)
+
+
+class NcaTest(Command):
+    user_options = []
+
+    def initialize_options(self):
+        pass
+
+    def finalize_options(self):
+        pass
+
+    def run(self):
+        import subprocess
+        import sys
+        errno = subprocess.call([
+            sys.executable, '-m', 'unittest', 'tests.__main__'])
+        raise SystemExit(errno)
 
 setup(name='vcs-ssh',
       description="VCS agnostic repository sharing through SSH",
@@ -37,13 +51,24 @@ setup(name='vcs-ssh',
           'vcs_ssh',
           ],
       # test_suite='tests',
+      cmdclass={
+          'test': NcaTest,
+          },
       packages=[
           'ssh_harness',
           'ssh_harness.tests',
+          'ssh_harness.contexts',
           ],
       data_files=[
-          ('share/doc/vcs-ssh/', ['./run-tests.sh', ]),
-          ('share/doc/vcs-ssh/', ['tests/*', ]),
+          ('share/doc/vcs-ssh/',
+           ['./run-tests.sh',
+            'ssh_harness/__init__.py',
+            'ssh_harness/contexts/backupeditandrestore.py',
+            'ssh_harness/contexts/iocapture.py',
+            'ssh_harness/contexts/inthrowabletempdir.py',
+            ]
+           + glob.glob('tests/test_*.py')
+           ),
           ],
       scripts=['vcs-ssh', ],
       license='GNU GPLv2.0',

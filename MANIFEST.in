@@ -1,6 +1,8 @@
 include vcs-ssh
 include vcs_ssh.py
 include tests/*.py
+include tests/fixtures/bin/*
+include tests/tmp
 include ssh_harness/*.py
 include ssh_harness/contexts/*.py
 include run-tests.sh
