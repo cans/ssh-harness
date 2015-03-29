@@ -5,6 +5,7 @@
 *.tap
 *.coverage*
 *.log
+.tox
 __pycache__
 build
 dist
