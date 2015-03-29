@@ -536,7 +536,7 @@ class SshHarnessSshdTestCase(TestCase):
         SshHarnessSshd._FILES['USER_RSA_KEY'] = 'id_rsa'
         SshHarnessSshd.SSHD_BIN = '/bin/echo'
         SshHarnessSshd.tearDownClass()
-        for k in list(SshHarness._errors.keys()):
+        for k in list(SshHarnessSshd._errors.keys()):
             del SshHarness._errors[k]
 
     def test_start_sshd_failure(self):

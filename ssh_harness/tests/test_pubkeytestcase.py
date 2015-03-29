@@ -61,17 +61,18 @@ class PubKeyTestCase(PubKeyAuthSshClientTestCase):
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE)
+
         out, err = client.communicate(
             input='ls -1 {}\nexit 0'.format(self.SSH_BASEDIR).encode('utf-8'))
-        out = out.strip().split('\n'.encode('utf-8'))
 
+        self._debug(out, err, client)
+
+        out = out.strip().split('\n'.encode('utf-8'))
         # Sorting should not be necessary as LS(1) should sort for us, yet we
-        # have seen occurrences where the last to items were not in the right
+        # have seen occurrences where the last two items were not in the right
         # order (!) Is it a problem with the slicing applied below ?
         # Better safe san sorry as they say ...
         out.sort()
-
-        self._debug(out, err, client)
 
         self.assertEqual(err, expected_err)
 

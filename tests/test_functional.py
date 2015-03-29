@@ -344,8 +344,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
     def _preconditions(cls):
         global TEMP_PATH
         super(VcsSshIntegrationTestCase, cls)._preconditions()
-        pc_met = cls._check_dir(TEMP_PATH)
-        pc_met = cls._check_dir(cls.BZR_CONFIG_DIR)
+        pc_met = cls._check_dir(cls.REPOSITORIES_PATH)
+        pc_met = cls._check_dir(cls.BZR_CONFIG_DIR) and pc_met
 
         # Soft preconditions: they don't fail the test suite, but will
         # condition the execution of some tests.
