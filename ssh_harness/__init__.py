@@ -711,7 +711,11 @@ Host {ssh_config_host_name}
         """Restores the directories which mode we changed to protect the
         private keys to their previous modes.
         (see ::``)"""
-        for directory, mode in cls._NEED_CHMOD:
+        while True:
+            try:
+                directory, mode = cls._NEED_CHMOD.pop()
+            except IndexError:
+                return
             logger.debug(_("Restoring permissions on `{}' to {}.")
                          .format(directory, oct(mode)))
             try:
@@ -755,11 +759,11 @@ Host {ssh_config_host_name}
             hexdump(err, file=hexerr)
             hexdump(out, file=hexout)
 
-            logger.debug("Test `{test}' ended with status {status}:\n\n"
+            logger.debug("Commmand `{cmd}' ended with status {status}:\n\n"
                          "==STDERR==\n{err}\n{hexerr}\n\n==STDOUT==\n{out}\n"
                          "{hexout}\n"
                          .format(
-                             test='test_git_pull_from_read_write_repo',
+                             cmd='unknown',
                              out=out,
                              err=err,
                              hexout=hexout.getvalue(),

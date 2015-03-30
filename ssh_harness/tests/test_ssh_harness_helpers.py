@@ -24,9 +24,9 @@ import tempfile
 import logging
 from unittest import TestCase, SkipTest
 try:
-    from unittest.mock import patch
+    from unittest.mock import patch, call, Mock
 except ImportError:
-    from mock import patch
+    from mock import Mock, patch, call
 
 MODULE_PATH = os.path.abspath(os.path.dirname(__file__))
 FIXTURE_PATH = os.path.sep.join([MODULE_PATH, 'fixtures', ])
@@ -38,7 +38,7 @@ sys.path.append(os.path.join(FIXTURE_PATH, 'bin'))
 import fake_ssh_keyscan
 
 from ssh_harness.contexts import BackupEditAndRestore
-from ssh_harness import BaseSshClientTestCase
+from ssh_harness import BaseSshClientTestCase, _PermissionError
 
 
 class SshHarness(BaseSshClientTestCase):
@@ -149,6 +149,64 @@ class SshHarnessCheckDirTestCase(TestCase):
         self.assertRegexpMatches(
             error,
             '_skip\(exc=\[Errno 13\] Permission denied:.*\)')
+
+
+class SshHarnessPreconditions(SshHarness):
+    _check_auxiliary_program = Mock()
+    _check_dir = Mock()
+    _skip = Mock()
+
+
+class SshHarnessPreconditionsTestCase(TestCase):
+
+    def reset_mocks(self):
+        # Re-create mocks 'cause reset_mock() does not reset return_value or
+        # side_effect attributes and return_value is a bitch to reset (cannot
+        # del, set to None, or whatever I can think of)
+        SshHarnessPreconditions._check_auxiliary_program = Mock()
+        SshHarnessPreconditions._check_dir = Mock()
+        SshHarnessPreconditions._skip.reset_mock()
+
+    def setUp(self):
+        self.addCleanup(self.reset_mocks)
+
+    def test__preconditions_calls__skip_if_some_preconditions_is_not_met(self):
+        SshHarnessPreconditions._check_auxiliary_program.return_value = False
+        SshHarnessPreconditions._check_dir.return_value = False
+
+        SshHarnessPreconditions._preconditions()
+
+        self.assertEqual(
+            SshHarnessPreconditions._check_auxiliary_program.call_count, 3)
+        self.assertEqual(
+            SshHarnessPreconditions._check_dir.call_count, 4)
+        SshHarnessPreconditions._skip.assert_called_once()
+
+    def test__preconditions_fails_as_soon_as_one__check_dir_test_fails(self):
+        SshHarnessPreconditions._check_auxiliary_program.return_value = False
+        SshHarnessPreconditions._check_dir.side_effect = [
+            bool(x) for x in range(0, 4)]
+
+        SshHarnessPreconditions._preconditions()
+
+        self.assertEqual(
+            SshHarnessPreconditions._check_auxiliary_program.call_count, 3)
+        self.assertEqual(
+            SshHarnessPreconditions._check_dir.call_count, 4)
+        SshHarnessPreconditions._skip.assert_called_once()
+
+    def test__preconditions_fails_as_soon_as_one__chk_aux_prog_test_fails(self):
+        SshHarnessPreconditions._check_auxiliary_program.side_effect = [
+            bool(x) for x in range(0, 5)]
+        SshHarnessPreconditions._check_dir.return_value = False
+
+        SshHarnessPreconditions._preconditions()
+
+        self.assertEqual(
+            SshHarnessPreconditions._check_auxiliary_program.call_count, 3)
+        self.assertEqual(
+            SshHarnessPreconditions._check_dir.call_count, 4)
+        SshHarnessPreconditions._skip.assert_called_once()
 
 
 # -----------------------------------------------------------------------------
@@ -600,21 +658,23 @@ class DeleteFileTestCase(TestCase):
 # -----------------------------------------------------------------------------
 
 
-class SshHarnessProtectPrivateKeys(SshHarness):
+class SshHarnessPermissions(SshHarness):
 
-    FIXTURE_PATH = os.path.join(TEMP_PATH, 'subdir', 'subsubdir')
+    SSH_BASEDIR = os.path.join(TEMP_PATH, 'subdir', 'subsubdir')
     # New list, because it is mutated by the __protect_private_keys() method.
     _NEED_CHMOD = []
 
 
-class ProtectPrivateKeysTestCase(TestCase):
+class PermissionManagementTestCase(TestCase):
 
     def setUp(self):
-        if not os.path.isdir(SshHarnessProtectPrivateKeys.FIXTURE_PATH):
-            os.makedirs(SshHarnessProtectPrivateKeys.FIXTURE_PATH,
-                        mode=504)
-        bits = SshHarnessProtectPrivateKeys.FIXTURE_PATH.split(os.sep)
-        self._subsubdir = SshHarnessProtectPrivateKeys.FIXTURE_PATH
+        self._mode = 504
+        self._mode_string = SshHarnessPermissions._mode2string(self._mode)
+        if not os.path.isdir(SshHarnessPermissions.SSH_BASEDIR):
+            os.makedirs(SshHarnessPermissions.SSH_BASEDIR,
+                        mode=self._mode)
+        bits = SshHarnessPermissions.SSH_BASEDIR.split(os.sep)
+        self._subsubdir = SshHarnessPermissions.SSH_BASEDIR
         self._subdir = os.sep.join(bits[:-1])
         # The following in case for some reason the directories were hanging
         # around (from a failed previous run...)
@@ -626,16 +686,96 @@ class ProtectPrivateKeysTestCase(TestCase):
             os.rmdir(self._subsubdir)
         if os.path.isdir(self._subdir):
             os.rmdir(self._subdir)
+        SshHarnessPermissions._NEED_CHMOD = []
 
     def test__protect_private_keys(self):
-        SshHarnessProtectPrivateKeys._protect_private_keys()
+        SshHarnessPermissions._protect_private_keys()
 
         sdir_mode = stat.S_IMODE(os.stat(self._subdir).st_mode)
-        self.assertEqual(sdir_mode & SshHarnessProtectPrivateKeys._MODE_MASK,
+        self.assertEqual(sdir_mode & SshHarnessPermissions._MODE_MASK,
                          stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP)
         ssdir_mode = stat.S_IMODE(os.stat(self._subsubdir).st_mode)
-        self.assertEqual(ssdir_mode & SshHarnessProtectPrivateKeys._MODE_MASK,
+        self.assertEqual(ssdir_mode & SshHarnessPermissions._MODE_MASK,
                          stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP)
+        self.assertEqual(2, len(SshHarnessPermissions._NEED_CHMOD))
 
+    def test__restore_modes_when_chmod_succeeds(self):
+        SshHarnessPermissions._NEED_CHMOD.append((self._subdir, 504, ))
+        SshHarnessPermissions._NEED_CHMOD.append((self._subsubdir, 504, ))
+        SshHarnessPermissions._restore_modes()
+
+        self.assertEqual(0, len(SshHarnessPermissions._NEED_CHMOD))
+
+    def test__restore_modes_when_chmod_raises_permission_error(self):
+        SshHarnessPermissions._NEED_CHMOD.append((self._subdir, 504, ))
+        SshHarnessPermissions._NEED_CHMOD.append((self._subsubdir, 504, ))
+
+        with patch('subprocess.call') as call_mock:
+            with patch('os.chmod') as chmod_mock:
+                chmod_mock.side_effect = _PermissionError()
+                SshHarnessPermissions._restore_modes()
+
+        chmod_mock.assert_has_calls([
+            call(self._subsubdir, self._mode, ),
+            call(self._subdir, self._mode, ),
+            ])
+        call_mock.assert_has_calls([
+            call(['sudo', 'chmod', self._mode_string, self._subsubdir, ]),
+            call(['sudo', 'chmod', self._mode_string, self._subdir, ]),
+            ])
+
+    def test__restore_modes_does_not_mind_if_need_chmod_empty(self):
+        self.tearDown()
+        with patch('os.chmod') as chmod_mock:
+            SshHarnessPermissions._restore_modes()
+
+        self.assertFalse(chmod_mock.called)
+
+
+# -----------------------------------------------------------------------------
+
+
+class DebugTestCase(TestCase):
+
+    def setUp(self):
+        self._debug = 'PYTHON_DEBUG'  # Which variable tells us we are in debug
+        self._debug_value = None
+        self._has_debug = self._debug in os.environ
+        if self._has_debug is True:  # Save env. var. value for restoration
+            self._debug_value = os.environ[self._debug]
+        self.addCleanup(self._restore_env)
+        self._client = Mock()
+
+    def _ensure_no_debug(self):
+        if self._has_debug:
+            del os.environ[self._debug]
+
+    def _ensure_debug(self):
+        if not self._has_debug:
+            os.environ[self._debug] = '1'
+
+    def _restore_env(self):
+        if not self._has_debug:
+            if self._debug in os.environ:
+                del os.environ[self._debug]
+        else:
+            if self._debug not in os.environ:
+                os.environ[self._debug] = self._debug_value
+
+    def test__debug_when_disabled(self):
+        self._ensure_no_debug()
+
+        with patch('ssh_harness.logger') as logger_mock:
+            SshHarness._debug('a', 'b', None)
+
+        self.assertEqual(logger_mock.debug.call_count, 0)
+
+    def test__debug_when_enabled(self):
+        self._ensure_debug()
+
+        with patch('ssh_harness.logger') as logger_mock:
+            SshHarness._debug('a', 'b', Mock())
+
+        self.assertEqual(logger_mock.debug.call_count, 1)
 
 # vim: syntax=python:sws=4:sw=4:et:
