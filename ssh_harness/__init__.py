@@ -772,7 +772,7 @@ Host {ssh_config_host_name}
         pc_met = cls._check_auxiliary_program(cls.SSHD_BIN) and pc_met
         pc_met = cls._check_auxiliary_program(cls.SSH_KEYSCAN_BIN) and pc_met
         pc_met = cls._check_auxiliary_program(cls.SSH_KEYGEN_BIN) and pc_met
-        cls._HAVE_SUDO = cls._check_auxiliary_program(cls.SUDO_BIN)
+        cls._HAVE_SUDO = cls._check_auxiliary_program(cls.SUDO_BIN, error=False)
         if not pc_met:
             cls._skip()
 
