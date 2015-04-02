@@ -688,6 +688,7 @@ class PermissionManagementTestCase(TestCase):
             os.rmdir(self._subdir)
         SshHarnessPermissions._NEED_CHMOD = []
         SshHarnessPermissions._HAVE_SUDO = False
+        SshHarnessPermissions._errors = {}
 
     def test__protect_private_keys(self):
         SshHarnessPermissions._protect_private_keys()
