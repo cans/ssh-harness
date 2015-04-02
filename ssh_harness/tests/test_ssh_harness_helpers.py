@@ -177,7 +177,7 @@ class SshHarnessPreconditionsTestCase(TestCase):
         SshHarnessPreconditions._preconditions()
 
         self.assertEqual(
-            SshHarnessPreconditions._check_auxiliary_program.call_count, 3)
+            SshHarnessPreconditions._check_auxiliary_program.call_count, 4)
         self.assertEqual(
             SshHarnessPreconditions._check_dir.call_count, 4)
         SshHarnessPreconditions._skip.assert_called_once()
@@ -190,20 +190,20 @@ class SshHarnessPreconditionsTestCase(TestCase):
         SshHarnessPreconditions._preconditions()
 
         self.assertEqual(
-            SshHarnessPreconditions._check_auxiliary_program.call_count, 3)
+            SshHarnessPreconditions._check_auxiliary_program.call_count, 4)
         self.assertEqual(
             SshHarnessPreconditions._check_dir.call_count, 4)
         SshHarnessPreconditions._skip.assert_called_once()
 
     def test__preconditions_fails_as_soon_as_one__chk_aux_prog_test_fails(self):
         SshHarnessPreconditions._check_auxiliary_program.side_effect = [
-            bool(x) for x in range(0, 5)]
+            bool(x) for x in range(0, 4)]
         SshHarnessPreconditions._check_dir.return_value = False
 
         SshHarnessPreconditions._preconditions()
 
         self.assertEqual(
-            SshHarnessPreconditions._check_auxiliary_program.call_count, 3)
+            SshHarnessPreconditions._check_auxiliary_program.call_count, 4)
         self.assertEqual(
             SshHarnessPreconditions._check_dir.call_count, 4)
         SshHarnessPreconditions._skip.assert_called_once()
@@ -687,6 +687,7 @@ class PermissionManagementTestCase(TestCase):
         if os.path.isdir(self._subdir):
             os.rmdir(self._subdir)
         SshHarnessPermissions._NEED_CHMOD = []
+        SshHarnessPermissions._HAVE_SUDO = False
 
     def test__protect_private_keys(self):
         SshHarnessPermissions._protect_private_keys()
@@ -707,10 +708,11 @@ class PermissionManagementTestCase(TestCase):
         self.assertEqual(0, len(SshHarnessPermissions._NEED_CHMOD))
 
     def test__restore_modes_when_chmod_raises_permission_error(self):
+        SshHarnessPermissions._HAVE_SUDO = True
         SshHarnessPermissions._NEED_CHMOD.append((self._subdir, 504, ))
         SshHarnessPermissions._NEED_CHMOD.append((self._subsubdir, 504, ))
 
-        with patch('subprocess.call') as call_mock:
+        with patch('subprocess.call', return_value=0) as call_mock:
             with patch('os.chmod') as chmod_mock:
                 chmod_mock.side_effect = _PermissionError()
                 SshHarnessPermissions._restore_modes()
@@ -720,8 +722,8 @@ class PermissionManagementTestCase(TestCase):
             call(self._subdir, self._mode, ),
             ])
         call_mock.assert_has_calls([
-            call(['sudo', 'chmod', self._mode_string, self._subsubdir, ]),
-            call(['sudo', 'chmod', self._mode_string, self._subdir, ]),
+            call(['sudo', '-n', 'chmod', self._mode_string, self._subsubdir, ]),
+            call(['sudo', '-n', 'chmod', self._mode_string, self._subdir, ]),
             ])
 
     def test__restore_modes_does_not_mind_if_need_chmod_empty(self):

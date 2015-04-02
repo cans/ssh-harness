@@ -288,6 +288,7 @@ class BaseSshClientTestCase(TestCase):
 
     USE_AUTH_METHOD = None
 
+    SUDO_BIN = '/usr/bin/sudo'
     SSHD_BIN = '/usr/sbin/sshd'
     SSH_KEYSCAN_BIN = '/usr/bin/ssh-keyscan'
     SSH_KEYGEN_BIN = '/usr/bin/ssh-keygen'
@@ -344,6 +345,7 @@ class BaseSshClientTestCase(TestCase):
     _HAVE_KNOWN_HOST = None
     _HAVE_SSH_ENVIRONMENT = None
     _HAVE_KNOWN_HOSTS = None
+    _HAVE_SUDO = False
     _OLD_LANG = None
 
     _AUTH_METHODS = ('password_auth', 'pubkey_auth', )
@@ -405,6 +407,7 @@ UsePAM no
 
     @classmethod
     def _skip(cls):
+        logger.debug('BaseSshClientTestCase._skip() called:')
         # Be civil, clean-up anyways.
         cls.tearDownClass()
 
@@ -416,6 +419,8 @@ UsePAM no
             for line in msg.splitlines():
                 reason += '    {}\n'.format(line)
         # Skip.
+        logger.debug('Reason for skipping test:')
+        logger.debug(reason)
         raise SkipTest(reason)
 
     @classmethod
@@ -614,6 +619,7 @@ UsePAM no
 
     @classmethod
     def _kill_sshd(cls):
+        logger.debug('Killing SSH Daemon.')
         cls._SSHD.terminate()
         return cls._SSHD.poll()
 
@@ -685,25 +691,35 @@ Host {ssh_config_host_name}
 
     @classmethod
     def _protect_private_keys(cls):
-        """Changes the modes of the directories along the patht to the
+        """Changes the modes of the directories along the path to the
         directory that contains the server and user private keys.
         Any directory not belonging to the keys owner must belong to root
-        and not be group nor other-writable (to prevent hijacking the users
+        and not be group- nor other-writable (to prevent hijacking the users
         private-key by replacing one of its parent directory by another one
-        containing offensive keys).
+        containing offensive keys, or grant illegitimate access by hijacking
+        the users ~/.authorized_keys file).
         """
         path = cls.SSH_BASEDIR
-        while '/' != path:
+        failed = False
+        while '/' != path and not failed:
             res = os.stat(path)
             mode = stat.S_IMODE(res.st_mode)
             if 0 < (mode & ~cls._MODE_MASK):
+                succeeded = cls._set_mode(path, mode & cls._MODE_MASK)
+                if not succeeded:
+                    warnings.warn(
+                        _("Permissions on {} `{}' are too broad and there is "
+                          "nothing you can do about it because you do not own "
+                          "it.\nPlease contact your system administrator.")
+                        .format('directory'
+                                if stat.S_ISDIR(res.st_mode)
+                                else 'file',
+                                path))
+                    cls._errors['_protect_private_key'] = _(
+                        "Cannot protect private keys.")
+                    cls._skip()
                 cls._NEED_CHMOD.append((path, mode, ))
-                subprocess.call([
-                    'sudo',
-                    'chmod',
-                    cls._mode2string(mode & cls._MODE_MASK),
-                    path,
-                    ])
+
             path = os.path.dirname(path)
 
     @classmethod
@@ -716,17 +732,25 @@ Host {ssh_config_host_name}
                 directory, mode = cls._NEED_CHMOD.pop()
             except IndexError:
                 return
+
             logger.debug(_("Restoring permissions on `{}' to {}.")
                          .format(directory, oct(mode)))
-            try:
-                os.chmod(directory, mode)
-            except _PermissionError:
-                subprocess.call([
-                    'sudo', 'chmod', cls._mode2string(mode), directory,
-                ])
-            else:
-                logger.warning(_("Could not restore mode of `{}' to {}.")
-                               .format(directory, oct(mode)))
+            cls._set_mode(directory, mode)
+
+    @classmethod
+    def _set_mode(cls, path, mode):
+        try:
+            os.chmod(path, mode)
+            return True
+        except _PermissionError:
+            if cls._HAVE_SUDO is True:
+                returncode = subprocess.call([
+                    'sudo', '-n', 'chmod', cls._mode2string(mode), path,
+                    ])
+                return 0 == returncode
+        logger.warning(_("Could not set mode of `{}' to {}.")
+                       .format(path, oct(mode)))
+        return False
 
     @classmethod
     def _preconditions(cls):
@@ -748,6 +772,7 @@ Host {ssh_config_host_name}
         pc_met = cls._check_auxiliary_program(cls.SSHD_BIN) and pc_met
         pc_met = cls._check_auxiliary_program(cls.SSH_KEYSCAN_BIN) and pc_met
         pc_met = cls._check_auxiliary_program(cls.SSH_KEYGEN_BIN) and pc_met
+        cls._HAVE_SUDO = cls._check_auxiliary_program(cls.SUDO_BIN)
         if not pc_met:
             cls._skip()
 
