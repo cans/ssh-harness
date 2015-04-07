@@ -700,7 +700,7 @@ class PermissionManagementTestCase(TestCase):
         self.assertEqual(ssdir_mode & SshHarnessPermissions._MODE_MASK,
                          stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP)
         # Depending on the platform
-        self.assertTrue(2 >= len(SshHarnessPermissions._NEED_CHMOD))
+        self.assertTrue(2 <= len(SshHarnessPermissions._NEED_CHMOD))
         self.assertIn((self._subdir, 504),
                       SshHarnessPermissions._NEED_CHMOD)
         self.assertIn((self._subsubdir, 504),
