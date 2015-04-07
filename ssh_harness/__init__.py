@@ -120,6 +120,31 @@ def hexdump(buf, file=sys.stdout, encoding='utf-8'):
     return i
 
 
+def expanduser_nohome(path):
+    """Expands path starting '~' without looking at :envvar:`HOME`.
+
+    Basically, this function works the same as :py:func:`os.expanduser`,
+    except that it does not rely on :envvar:`HOME`. Instead, it looks
+    directly into the system's passwd database (e.g. :file:`/etc/passwd`).
+
+    Indeed SSH always uses :manpage:`getpwnam(2)` and such when looking up for
+    data related to some user. In some test environments (e.g. Debian packaging
+    build/test) :var:`$HOME` is spoofed from some reasons. Thus relying on
+    :py:func:`os.expanduser` on our side to find similar data would lead to
+    editing configuration files in the spoofed `$HOME`, not in the *real* one
+    where SSH will read them. We would then be unable to reach the server.
+    """
+    if '~' != path[0]:
+        return path
+    path_bits = path.split(os.path.sep)
+    if 1 != len(path_bits[0]):
+        username = path_bits[0][1:]
+    else:
+        username = os.environ['LOGNAME']
+    res = pwd.getpwnam(username)
+    return os.path.join(*([res.pw_dir, ] + path_bits[1:]))
+
+
 class BaseSshClientTestCase(TestCase):
     """Base class for several ssh client test cases classes.
 
@@ -349,9 +374,9 @@ class BaseSshClientTestCase(TestCase):
     _OLD_LANG = None
 
     _AUTH_METHODS = ('password_auth', 'pubkey_auth', )
-    _KNOWN_HOSTS_PATH = os.path.expanduser('~/.ssh/known_hosts')
-    _SSH_ENVIRONMENT_PATH = os.path.expanduser('~/.ssh/environment')
-    _SSH_CONFIG_PATH = os.path.expanduser('~/.ssh/config')
+    _KNOWN_HOSTS_PATH = expanduser_nohome('~/.ssh/known_hosts')
+    _SSH_ENVIRONMENT_PATH = expanduser_nohome('~/.ssh/environment')
+    _SSH_CONFIG_PATH = expanduser_nohome('~/.ssh/config')
     _SSHD = None
     """Handle on the SSH daemon process."""
 
