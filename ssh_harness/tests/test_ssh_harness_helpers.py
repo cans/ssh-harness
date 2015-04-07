@@ -699,7 +699,12 @@ class PermissionManagementTestCase(TestCase):
         ssdir_mode = stat.S_IMODE(os.stat(self._subsubdir).st_mode)
         self.assertEqual(ssdir_mode & SshHarnessPermissions._MODE_MASK,
                          stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP)
-        self.assertEqual(2, len(SshHarnessPermissions._NEED_CHMOD))
+        # Depending on the platform
+        self.assertTrue(2 >= len(SshHarnessPermissions._NEED_CHMOD))
+        self.assertIn((self._subdir, 504),
+                      SshHarnessPermissions._NEED_CHMOD)
+        self.assertIn((self._subsubdir, 504),
+                      SshHarnessPermissions._NEED_CHMOD)
 
     def test__restore_modes_when_chmod_succeeds(self):
         SshHarnessPermissions._NEED_CHMOD.append((self._subdir, 504, ))
