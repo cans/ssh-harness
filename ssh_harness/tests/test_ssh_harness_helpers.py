@@ -195,7 +195,7 @@ class SshHarnessPreconditionsTestCase(TestCase):
             SshHarnessPreconditions._check_dir.call_count, 4)
         SshHarnessPreconditions._skip.assert_called_once()
 
-    def test__preconditions_fails_as_soon_as_one__chk_aux_prog_test_fails(self):
+    def test__preconditions_fails_when_one__chk_aux_prog_test_fails(self):
         SshHarnessPreconditions._check_auxiliary_program.side_effect = [
             bool(x) for x in range(0, 4)]
         SshHarnessPreconditions._check_dir.return_value = False
@@ -728,8 +728,10 @@ class PermissionManagementTestCase(TestCase):
             call(self._subdir, self._mode, ),
             ])
         call_mock.assert_has_calls([
-            call(['sudo', '-n', 'chmod', self._mode_string, self._subsubdir, ]),
-            call(['sudo', '-n', 'chmod', self._mode_string, self._subdir, ]),
+            call([
+                'sudo', '-n', 'chmod', self._mode_string, self._subsubdir, ]),
+            call([
+                'sudo', '-n', 'chmod', self._mode_string, self._subdir, ]),
             ])
 
     def test__restore_modes_does_not_mind_if_need_chmod_empty(self):

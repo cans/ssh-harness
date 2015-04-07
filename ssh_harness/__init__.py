@@ -662,6 +662,10 @@ Host {ssh_config_host_name}
         Port {port}
         IdentityFile {identity}
 '''.format(**args))
+        with open(cls._SSH_CONFIG_PATH, 'r') as user_config:
+            logger.debug(_("User's SSH Client config follows ({}):\n{}")
+                         .format(cls._SSH_CONFIG_PATH,
+                                 user_config.read()))
 
     @classmethod
     def _update_user_known_hosts(cls):
@@ -803,7 +807,7 @@ Host {ssh_config_host_name}
             cls._skip()
 
     @classmethod
-    def _debug(cls, out, err, client):
+    def _debug(cls, out, err, client, cmd='unknown'):
         if os.getenv("PYTHON_DEBUG"):
             hexerr = StringIO()
             hexout = StringIO()
@@ -814,7 +818,7 @@ Host {ssh_config_host_name}
                          "==STDERR==\n{err}\n{hexerr}\n\n==STDOUT==\n{out}\n"
                          "{hexout}\n"
                          .format(
-                             cmd='unknown',
+                             cmd=cmd,
                              out=out,
                              err=err,
                              hexout=hexout.getvalue(),
@@ -828,6 +832,10 @@ Host {ssh_config_host_name}
         This functions keep thing at a high level calling a method for each
         required step.
         """
+        logger.info("Setting up Ssh-Harness test-case {} for user '{} ({}/{})'"
+                    .format(cls.__name__,
+                            os.environ.get('LOGNAME', '??'),
+                            os.getuid(), os.geteuid()))
         cls._OLD_LANG = os.environ.get('LANG', None)
         os.environ['LANG'] = 'C'
 
@@ -856,7 +864,7 @@ Host {ssh_config_host_name}
     def runCommand(cls, cmd, input=None):
         if isinstance(input, str) and (3, 0, 0, ) <= sys.version_info:
             input = input.encode('utf-8')
-        logger.debug(_("Executing command: `'{}").format(' '.join(cmd)))
+        logger.debug(_("Executing command: `{}'").format(' '.join(cmd)))
         proc = subprocess.Popen(cmd,
                                 env=os.environ,
                                 stdin=subprocess.PIPE,
@@ -867,7 +875,7 @@ Host {ssh_config_host_name}
             # In Python 3.x subprocess module return bytes not string.
             err = err.decode(_ENCODING)
             out = out.decode(_ENCODING)
-        cls._debug(out, err, proc)
+        cls._debug(out, err, proc, cmd=cmd)
         return proc.returncode, out, err
 
     @classmethod
