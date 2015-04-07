@@ -100,7 +100,7 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         'rw_git': 'git-rw.git',
         'ro_hg': 'hg-ro',
         'rw_hg': 'hg-rw',
-        'ro_svn': 'svn-ro',
+        'rw_svn': 'svn-rw',
         'rw_svn': 'svn-rw',
         'rw_bzr': 'bzr-rw',
         }
@@ -432,7 +432,8 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         if not path == os.getcwd():
             raise Exception('Not where I should be')
         repo_basename = self._basename(url)
-        os.chdir(repo_basename)
+        repo_dir = os.path.join(path, repo_basename)
+        os.chdir(repo_dir)
 
     def _leave_working_copy(self, path=None):
         if path is None:
@@ -539,20 +540,15 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
 
         cmd = ['git', 'clone', self._RO_GIT_URL, ]
 
-        client = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
-        out, err = client.communicate()
+        returncode, out, err = self.runCommand(cmd)
 
         if self.GIT_VERSION < (1, 8, 0):
-            self.assertEqual('', err.decode('utf-8'))
-            self.assertEqual("Cloning into 'git-ro'...\n", out.decode('utf-8'))
+            self.assertEqual('', err)
+            self.assertEqual("Cloning into 'git-ro'...\n", out)
         else:
-            self.assertEqual('', out.decode('utf-8'))
-            self.assertEqual("Cloning into 'git-ro'...\n", err.decode('utf-8'))
-        self.assertEqual(client.returncode, 0)
+            self.assertEqual('', out)
+            self.assertEqual("Cloning into 'git-ro'...\n", err)
+        self.assertEqual(returncode, 0)
 
     def test_git_clone_from_read_write_repo(self):
         if not self.HAVE_GIT:
@@ -560,19 +556,11 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         if not self.HAVE_GIT_RW_REPOSITORY:
             self.skipTest('Git fixture repository could not be created.')
 
-        cmd = [
-            'git',
-            'clone',
-            self._RW_GIT_URL,
-            ]
-        client = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
-        out, err = client.communicate()
+        cmd = ['git', 'clone', self._RW_GIT_URL, ]
 
-        self.assertEqual(client.returncode, 0)
+        returncode, out, err = self.runCommand(cmd)
+
+        self.assertEqual(returncode, 0)
 
     def test_git_pull_from_read_only_repo(self):
         if not self.HAVE_GIT:
@@ -582,27 +570,17 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
 
         # First we clone the repo as it is.
         self._clone(self._RO_GIT_URL)
-        cmd = [
-            'git',
-            'pull',
-            ]
+        cmd = ['git', 'pull', ]
 
         # Then we add something to pull to the repository (by
         # making a new revision in another, local, working copy)
         self._make_a_revision_and_push_it(self._RO_GIT_LOCAL)
 
         self._enter_working_copy(self._RO_GIT_URL)
-        client = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
-        out, err = client.communicate()
+        returncode, out, err = self.runCommand(cmd)
         self._leave_working_copy()
 
-        self._debug(out, err, client)
-
-        self.assertEqual(client.returncode, 0)
+        self.assertEqual(returncode, 0)
         self.assertRegexpMatches(
             err,
             maybe_bytes(
@@ -634,27 +612,17 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         # First we clone the repo as it is.
         self._clone(self._RW_GIT_URL)
 
-        cmd = [
-            'git',
-            'pull',
-            ]
+        cmd = ['git', 'pull', ]
 
         # Then we add something to pull to the repository (by
         # making a new revision in another, local, working copy)
         self._make_a_revision_and_push_it(self._RW_GIT_LOCAL)
 
         self._enter_working_copy(self._RW_GIT_URL)
-        client = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
-        out, err = client.communicate()
+        returncode, out, err = self.runCommand(cmd)
         self._leave_working_copy()
 
-        self._debug(out, err, client)
-
-        self.assertEqual(client.returncode, 0)
+        self.assertEqual(returncode, 0)
         self.assertRegexpMatches(
             err,
             re.compile(
@@ -681,24 +649,13 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
         # Have to make a remote clone or the push would be local (slow i know).
         self._make_a_revision(self._RW_GIT_URL)
 
-        cmd = [
-            'git',
-            'push',
-            self._RW_GIT_URL,
-            ]
+        cmd = ['git', 'push', self._RW_GIT_URL, ]
 
         self._enter_working_copy(self._RW_GIT_URL)
-        client = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
-        out, err = client.communicate()
+        returncode, out, err = self.runCommand(cmd)
         self._leave_working_copy()
 
-        self._debug(out, err, client)
-
-        self.assertEqual(client.returncode, 0)
+        self.assertEqual(returncode, 0)
         self.assertEqual(out, maybe_bytes(out, ''))
 
         self.assertRegexpMatches(
@@ -714,29 +671,21 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
 
         # Have to make a remote clone or the push would be local (slow i know).
         self._make_a_revision(self._RO_GIT_URL)
+        cmd = ['git', 'push', ]
 
         self._enter_working_copy(self._RO_GIT_URL)
-        client = subprocess.Popen([
-            'git',
-            'push',
-            ],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
-        out, err = client.communicate()
+        returncode, out, err = self.runCommand(cmd)
         self._leave_working_copy()
 
-        self._debug(out, err, client)
-
-        self.assertEqual(client.returncode, 128)
+        self.assertEqual(returncode, 128)
         self.assertRegexpMatches(
             err,
             re.compile(
                 'remote: \x1b\[1;41mYou only have read only access to this '
                 'repository\x1b\[0m: you cannot push anything into it !\n'
-                'fatal: .*'.encode('utf-8'),
+                'fatal: .*',
                 re.S))
-        self.assertEqual(out, ''.encode('utf-8'))
+        self.assertEqual(out, '')
 
     # -- Mercurial related tests ----------------------------------------------
 
@@ -747,12 +696,6 @@ class VcsSshIntegrationTestCase(PubKeyAuthSshClientTestCase):
             self.skipTest('Mercurial fixture repository could not be created.')
         cmd = ['hg', 'clone', self._RO_HG_URL, ]
 
-        # client = subprocess.Popen(
-        #     cmd,
-        #     stdin=subprocess.PIPE,
-        #     stdout=subprocess.PIPE,
-        #     stderr=subprocess.PIPE)
-        # out, err = client.communicate()
         returncode, out, err = self.runCommand(cmd)
 
         self.assertEqual(returncode, 0)
