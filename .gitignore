@@ -5,6 +5,7 @@
 *.tap
 *.coverage*
 *.log
+.placeholder
 .tox
 __pycache__
 build
