@@ -505,9 +505,6 @@ class SshHarnessAuthzdKeysTestCase(TestCase):
 class SshHarnessGenerateKeys(SshHarness):
 
     _FILES = SshHarness._FILES.copy()
-    # USE_AUTH_METHOD = SshHarness.AUTH_METHOD_PUBKEY
-    FIXTURE_PATH = os.path.join(
-        os.path.abspath(os.getcwd()), 'tests', 'fixtures', 'sshd')
 
 
 class SshHarnessGenerateKeysTestCase(TestCase):
@@ -521,6 +518,7 @@ class SshHarnessGenerateKeysTestCase(TestCase):
         del SshHarnessGenerateKeys._FILES['HOST_RSA_KEY']
         del SshHarnessGenerateKeys._FILES['HOST_ECDSA_KEY']
         self.pubkey = '{}.pub'.format(SshHarnessGenerateKeys.HOST_DSA_KEY_PATH)
+        SshHarnessGenerateKeys._check_dir(SshHarnessGenerateKeys.SSH_BASEDIR)
 
     def tearDown(self):
         SshHarnessGenerateKeys._FILES = self._FILES
