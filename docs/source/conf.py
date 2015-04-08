@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# vcs-ssh documentation build configuration file, created by
+# ssh-harness documentation build configuration file, created by
 # sphinx-quickstart on Tue Apr  7 18:28:02 2015.
 #
 # This file is execfile()d with the current directory set to its
@@ -50,7 +50,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'vcs-ssh'
+project = u'ssh-harness'
 copyright = u'2015, Nicolas CANIART'
 
 # The version info for the project you're documenting, acts as replacement for
@@ -183,7 +183,7 @@ html_static_path = ['_static']
 #html_file_suffix = None
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'vcs-sshdoc'
+htmlhelp_basename = 'ssh-harnessdoc'
 
 
 # -- Options for LaTeX output ---------------------------------------------
@@ -203,7 +203,7 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-  ('index', 'vcs-ssh.tex', u'vcs-ssh Documentation',
+  ('index', 'ssh-harness.tex', u'ssh-harness Documentation',
    u'Nicolas CANIART', 'manual'),
 ]
 
@@ -232,10 +232,10 @@ latex_documents = [
 
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
-man_pages = [
-    ('vcs-ssh.1', 'vcs-ssh', u'vcs-ssh Documentation',
-     [u'Nicolas CANIART'], 1)
-]
+# man_pages = [
+#     ('ssh-harness.1', 'ssh-harness', u'ssh-harness Documentation',
+#      [u'Nicolas CANIART'], 1)
+# ]
 
 # If true, show URL addresses after external links.
 #man_show_urls = False
@@ -246,11 +246,11 @@ man_pages = [
 # Grouping the document tree into Texinfo files. List of tuples
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
-texinfo_documents = [
-  ('index', 'vcs-ssh', u'vcs-ssh Documentation',
-   u'Nicolas CANIART', 'vcs-ssh', 'One line description of project.',
-   'Miscellaneous'),
-]
+# texinfo_documents = [
+#   ('index', 'ssh-harness', u'ssh-harness Documentation',
+#    u'Nicolas CANIART', 'ssh-harness', 'One line description of project.',
+#    'Miscellaneous'),
+# ]
 
 # Documents to append as an appendix to all manuals.
 #texinfo_appendices = []

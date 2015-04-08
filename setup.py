@@ -2,19 +2,19 @@
 #
 #  Copyright © 2013-2014, Nicolas CANIART <nicolas@caniart.net>
 #
-#  This file is part of vcs-ssh.
+#  This file is part of ssh-harness.
 #
-#  vcs-ssh is free software: you can redistribute it and/or modify
+#  ssh-harness is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License version 2 as
 #  published by the Free Software Foundation.
 #
-#  vcs-ssh is distributed in the hope that it will be useful,
+#  ssh-harness is distributed in the hope that it will be useful,
 #  but WITHOUT ANY WARRANTY; without even the implied warranty of
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU General Public License for more details.
 #
 #  You should have received a copy of the GNU General Public License
-#  along with vcs-ssh.  If not, see <http://www.gnu.org/licenses/>.
+#  along with ssh-harness.  If not, see <http://www.gnu.org/licenses/>.
 #
 from distutils.core import setup, Command
 import glob
@@ -39,13 +39,13 @@ class NcaTest(Command):
             sys.executable, '-m', 'unittest', 'tests.__main__'])
         raise SystemExit(errno)
 
-setup(name='vcs-ssh',
-      description="VCS agnostic repository sharing through SSH",
+setup(name='ssh-harness',
+      description="A Test Harness for SSH dependant applications",
       version=_version,
       author='Nicolas CANIART',
       author_email='nicolas@caniart.net',
-      url='http://www.caniart.net/devel/vcs-ssh/',
-      download_url='https://github.com/cans/vcs-ssh/tarball/{}'
+      url='http://www.caniart.net/devel/ssh-harness/',
+      download_url='https://github.com/cans/ssh-harness/tarball/{}'
           .format(_version),
       py_modules=[
           'vcs_ssh',
@@ -60,7 +60,7 @@ setup(name='vcs-ssh',
           'ssh_harness.contexts',
           ],
       data_files=[
-          ('share/doc/vcs-ssh/',
+          ('share/doc/ssh-harness/',
            ['./run-tests.sh',
             'ssh_harness/__init__.py',
             'ssh_harness/contexts/backupeditandrestore.py',
@@ -70,7 +70,7 @@ setup(name='vcs-ssh',
            + glob.glob('tests/test_*.py')
            ),
           ],
-      scripts=['vcs-ssh', ],
+      scripts=['ssh-harness', ],
       license='GNU GPLv2.0',
       classifiers=[
           'Development Status :: 5 - Production/Stable',

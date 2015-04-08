@@ -1,6 +1,6 @@
 # -*- coding: utf-8-unix; -*-
 #
-# Copyright © 2014, Nicolas CANIART <nicolas@caniart.net>
+# Copyright © 2014-2015, Nicolas CANIART <nicolas@caniart.net>
 #
 from __future__ import print_function
 from unittest import TestCase, skipIf
