@@ -33,7 +33,7 @@ from ssh_harness.contexts import IOCapture
 
 class IOCaptureTestCase(TestCase):
 
-    MODULE_NAME = 'ssh_harness.tests.mod4tests'
+    MODULE_NAME = 'tests.mod4tests'
 
     def setUp(self):
         self.args = ('message,', )
