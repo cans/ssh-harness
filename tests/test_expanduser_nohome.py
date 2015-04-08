@@ -35,6 +35,16 @@ class ExpandUserNoHomeTestCase(TestCase):
         if self._OLDHOME is not None:
             os.environ['HOME'] = self._OLDHOME
 
+    def test_os_expanduser_home_spoofed_is_problematic(self):
+        """Show why os.expanduser is problematic when $HOME is spoofed."""
+        os.environ['HOME'] = '/some/directory'
+
+        res = os.path.expanduser('~/to/go')
+
+        self.assertEqual(res,
+                         os.path.join(os.environ['HOME'], 'to/go'))
+        self.assertNotEqual(os.environ['HOME'], self._REALHOME)
+
     def test_expanduser_nohome_home_is_same_as_in_passwd_db(self):
         res = expanduser_nohome('~/to/go')
 
@@ -60,6 +70,13 @@ class ExpandUserNoHomeTestCase(TestCase):
         res = expanduser_nohome(path)
 
         self.assertEqual(path, res)
+
+    def test_expanduser_nohome_tilda_root(self):
+        path = '~root/path/to/go'
+        expected = '/root/path/to/go'
+        res = expanduser_nohome(path)
+
+        self.assertEqual(res, expected)
 
 
 # vim: syntax=python:sws=4:sw=4:et:
