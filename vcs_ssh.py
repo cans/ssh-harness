@@ -62,7 +62,7 @@ __all__ = [
     'VERSION',
     ]
 
-VERSION = (1, 0, 4, )
+VERSION = (1, 0, 5, )
 
 
 def have_required_command(func):
