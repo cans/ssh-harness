@@ -8,3 +8,7 @@ include ssh_harness/tests/fixtures/bin/*.py
 include run-tests.sh
 include LICENSE
 include README.md
+include docs/Makefile
+include docs/make.bat
+include docs/source/conf.py
+recursive-include docs/source *.rst
