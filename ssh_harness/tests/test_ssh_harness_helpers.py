@@ -238,6 +238,9 @@ class SshHarnessSkipTestCase(TestCase):
 
 class SshHarnessSetUpClassTestCase(TestCase):
 
+    def setUp(self):
+        os.makedirs(SshHarnessSkip.SSH_BASEDIR)
+
     def tearDown(self):
         for k in list(SshHarnessSkip._errors.keys()):
             del SshHarnessSkip._errors[k]
@@ -245,6 +248,8 @@ class SshHarnessSetUpClassTestCase(TestCase):
             SshHarness._errors is BaseSshClientTestCase._errors)
         if 'SSH_HARNESS_DEBUG' in os.environ:
             del os.environ['SSH_HARNESS_DEBUG']
+
+        os.rmdir(SshHarnessSkip.SSH_BASEDIR)
 
     def test_setupclass_calls_skip(self):
         SshHarnessSkip._errors['fictional_func1()'] = 'Some message'
@@ -527,6 +532,7 @@ class SshHarnessGenerateKeysTestCase(TestCase):
             os.unlink(self.pubkey)
         if os.path.isfile(SshHarnessGenerateKeys.HOST_DSA_KEY_PATH):
             os.unlink(SshHarnessGenerateKeys.HOST_DSA_KEY_PATH)
+        os.rmdir(SshHarnessGenerateKeys.SSH_BASEDIR)
 
     def test_generate_keys_success(self):
         SshHarnessGenerateKeys._generate_keys()
@@ -580,6 +586,8 @@ class SshHarnessSshd(SshHarness):
 class SshHarnessSshdTestCase(TestCase):
 
     def setUp(self):
+        SshHarnessSshd._check_dir(SshHarnessSshd.SSH_BASEDIR)
+
         # We remove the user RSA key file default because we don't want it to
         # be actually generated.
         self._args = SshHarnessSshd._gather_config()
@@ -594,6 +602,8 @@ class SshHarnessSshdTestCase(TestCase):
         SshHarnessSshd.tearDownClass()
         for k in list(SshHarnessSshd._errors.keys()):
             del SshHarness._errors[k]
+
+        os.rmdir(SshHarnessSshd.SSH_BASEDIR)
 
     def test_start_sshd_failure(self):
         with self.assertRaises(SkipTest):

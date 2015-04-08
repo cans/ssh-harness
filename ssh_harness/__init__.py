@@ -168,7 +168,7 @@ class BaseSshClientTestCase(TestCase):
     for the current user
 
     All those data are, by default written and stored in a
-    'tests/fixtures/sshd' directory within the working directory of the
+    'tests/tmp/sshd' directory within the working directory of the
     test runner that runs the test. This can be changed by overriding
     the ``SSH_BASEDIR`` class attribute of the test case.
 
@@ -191,7 +191,7 @@ class BaseSshClientTestCase(TestCase):
          ...
 
        Then the files necessary to run the SSH daemon are stored in the
-        ``/path/to/workdir/tests/fixtures/sshd``  directory.
+        ``/path/to/workdir/tests/tmp/sshd``  directory.
 
     Once the SSH daemon has started we update the current user's
     ``~/.ssh/known_hosts`` file (see :man:`ssh-keyscan`) so that the
@@ -459,6 +459,31 @@ UsePAM no
 
     @classmethod
     def _check_auxiliary_program(cls, path, error=True):
+        """Checks `path` for being an executable file mode.
+
+        Parameters
+        ----------
+
+           path (str): the binary file path to check.
+           error (bool): wether to record a message in case of an error.
+
+        Returns
+        -------
+
+        False if the file does not exists or is not executable, True otherwise.
+
+        Dependencies
+        ------------
+
+        Depends on the :attr:`BaseSshClientTestCase._BIN_MASK` class attribute.
+
+        Side effects
+        ------------
+
+        May add entries to the :attr:`BaseSshClientTestCase._errors` class
+        attribute.
+
+        """
         if not os.path.isfile(path):
             if error:
                 cls._errors[path] = 'Program not found.'
@@ -477,6 +502,30 @@ UsePAM no
 
     @classmethod
     def _check_dir(cls, path, mode=None):
+        """Checks `path` for being a directory and its mode.
+
+        If :param:`path` does not exists, tries to create it. If it
+        cannot returns False.
+
+        Parameters
+        ----------
+
+           path (str): the directory path to check.
+           mode (int): the mode against which validate the directory's mode.
+
+        Return
+        ------
+
+        False if the directory did not exists and could not be created, or
+        if the directory exists but its mode is not the one requested.
+        Otherwise returns True.
+
+        Side effects
+        ------------
+
+        May create a directory on the filesystem.
+
+        """
         if mode is None:
             mode = stat.S_IRWXU
         if not os.path.isdir(path):
@@ -545,6 +594,13 @@ UsePAM no
 
     @classmethod
     def _generate_environment_file(cls):
+        """Writes a :file:`~/.ssh/environment` for ssh client.
+
+        Side effects
+        ------------
+
+        May write a file in the users :file:`~/.ssh/` directory.
+        """
         if cls.SSH_ENVIRONMENT_FILE is False:
             return
         with BackupEditAndRestore(cls._context_name,
@@ -555,6 +611,16 @@ UsePAM no
 
     @classmethod
     def _generate_authzd_keys_file(cls):
+        """Creates or updates the users :file:`~/.ssh/authorized_keys` files.
+
+        The original file is backed-up and restore when the test-suite is
+        done.
+
+        Side effects
+        ------------
+
+        Alters or creates the file :file:`~/.ssh/authorized_keys`.
+        """
         # Generate the authorized_key file with the newly created key in it.
         logger.debug("Creating the user's authorized_keys file.")
         with open(cls.AUTHORIZED_KEYS_PATH, 'wt') as authzd_file:
@@ -582,6 +648,14 @@ UsePAM no
 
     @classmethod
     def _generate_sshd_config(cls, args):
+        """Writes a configuration file for :program:`sshd`.
+
+        Side effects
+        ------------
+
+        Writes a :file:`sshd_config` file in the directory pointed by
+        :attr:`BaseSshClientTestCase.SSH_BASEDIR`
+        """
         with open(cls.SSHD_CONFIG_PATH, 'wt') as f:
             content = cls._SSHD_CONFIG.format(**args)
             logger.debug(content)
