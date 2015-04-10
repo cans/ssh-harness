@@ -1,5 +1,5 @@
-SSH-HARNESS: A Test Harness for testing SSH dependant applications
-==================================================================
+SSH-HARNESS: A Test Harness for SSH dependant applications
+==========================================================
 
 
 The ``ssh_harness`` python package provides a ``unittest.TestCase`` subclass
@@ -30,9 +30,7 @@ How does one use ssh-harness
 You basically use it like any other TestCase class from Python's unittest
 framework:
 
-.. code-block:: python
-   :linenos:
-   :emphasize-lines: 2,6
+::
 
    # -*- coding: utf-8; -*-
    from ssh_harness import PubKeyAuthSshClientTestCase

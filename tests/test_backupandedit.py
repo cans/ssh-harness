@@ -27,7 +27,6 @@ def fake_rename(patcher):
 class BackupEditAndRestoreTestCase(TestCase):
 
     MODULE_PATH = os.path.abspath(os.path.dirname(__file__))
-    # FIXTURE_PATH = os.path.sep.join([MODULE_PATH, 'fixtures', ])
     TEMP_PATH = os.path.sep.join([MODULE_PATH, 'tmp', 'backupeditandrestore'])
 
     _context_name = 'test_backupandedit'
