@@ -36,7 +36,10 @@ from .contexts import BackupEditAndRestore
 __ALL__ = [
     'PubKeyAuthSshClientTestCase',
     'PasswdAuthSshClientTestCase',
+    'VERSION',
     ]
+
+VERSION = (0, 1, 0, )
 
 _ENCODING = getpreferredencoding(do_setlocale=False)
 
